@@ -1,11 +1,75 @@
 const { API } = require("revolt-api");
-const { WebSocket } = require("ws");
-const rtc = require("rtc-everywhere")();
-const RTCPeerConnection = rtc.RTCPeerConnection;
-const RTCIceCandidate = rtc.RTCIceCandidate;
+const Signaling = require("./Signaling.js");
+const fs = require("fs");
+const { OpusEncoder } = require("@discordjs/opus");
+const prism = require("prism-media");
 
-const bottoken = require("config.json").token;
+const { Device, useSdesMid, useAbsSendTime, MediaStreamTrack, RTCRtpCodecParameters, useFIR, useNACK, usePLI, useREMB } = require("msc-node");
+
+const bottoken = require("./config.json").token;
 const client = new API({ authentication: { revolt: bottoken }});
+
+const signaling = new Signaling(client, "01GA8VZE79JGPEPBT6KEN54686");
+signaling.on("token", console.log);
+signaling.on("authenticate", (data) => {
+  console.log(data);
+  device.load({ routerRtpCapabilities: data.data.rtpCapabilities });
+});
+signaling.on("initTransports", (data) => {
+  // init connection
+  console.log(data);
+  initTransports(data);
+});
+signaling.authenticate(); // start signaling flow
+
+const device = new Device({
+  headerExtensions: {
+    audio: [
+      useSdesMid(),
+    ]
+  },
+  codecs: {
+    audio: [
+      new RTCRtpCodecParameters({
+        mimeType: "audio/opus",
+        clockRate: 48000,
+        preferredPayloadType: 100,
+        channels: 2
+      })
+    ]
+  }
+});
+const encoder = new OpusEncoder(48000, 2);
+const opusEncoder = new prism.opus.Encoder({
+  frameSize: 960,
+  channels: 2,
+  rate: 48000
+});
+
+async function initTransports(data) {
+  console.log("init");
+  const sendTransport = device.createSendTransport({...data.data.sendTransport});
+  sendTransport.on("connect", ({ dtlsParameters }, callback) => {
+    signaling.connectTransport(sendTransport.id, dtlsParameters).then(callback);
+  });
+  sendTransport.on("produce", (parameters, callback) => {
+    signaling.startProduce("audio", parameters.rtpParameters).then((id) => {
+      console.log(id);
+      callback({ id });
+    });
+  });
+
+  const track = new MediaStreamTrack({ kind: "audio" });
+
+  const stream = fs.createReadStream(__dirname + "\\assets\\warbringer.mp3");
+  stream.pipe(opusEncoder);
+  opusEncoder.on("data", (data) => {
+    track.writeRtp(data);
+  });
+
+  const rtpProducer = await sendTransport.produce({ track: track, appData: { type: "audio" } });
+}
+/*
 
 function getToken(channelId) {
   return new Promise((res) => {
@@ -73,4 +137,4 @@ function initTransport(data) {
   socket.on("error", (e) => {
     console.log("error", e);
   });
-})();
+})();*/

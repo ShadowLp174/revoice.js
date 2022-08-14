@@ -9,6 +9,10 @@
   "author": "ShadowLp174",
   "license": "MIT",
   "dependencies": {
+    "@discordjs/opus": "^0.8.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "msc-node": "^0.0.10",
+    "prism-media": "^1.3.4",
     "revolt-api": "^0.5.5",
     "rtc-everywhere": "^0.0.5",
     "wrtc": "^0.4.7",
