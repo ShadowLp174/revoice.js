@@ -3,6 +3,8 @@ const Signaling = require("./Signaling.js");
 const fs = require("fs");
 const { OpusEncoder } = require("@discordjs/opus");
 const prism = require("prism-media");
+const { createSocket } = require("dgram");
+const { exec } = require("child_process");
 
 const { Device, useSdesMid, useAbsSendTime, MediaStreamTrack, RTCRtpCodecParameters, useFIR, useNACK, usePLI, useREMB } = require("msc-node");
 
@@ -61,13 +63,26 @@ async function initTransports(data) {
 
   const track = new MediaStreamTrack({ kind: "audio" });
 
-  const stream = fs.createReadStream(__dirname + "\\assets\\warbringer.mp3");
-  stream.pipe(opusEncoder);
-  opusEncoder.on("data", (data) => {
+
+  const udp = createSocket("udp4");
+  udp.bind(5030);
+  udp.addListener("message", (data) => {
     track.writeRtp(data);
   });
 
+  /*const stream = fs.createReadStream(__dirname + "\\assets\\warbringer.mp3");
+  stream.pipe(opusEncoder);
+  opusEncoder.on("data", (data) => {
+    track.writeRtp(data);
+  });*/
+
   const rtpProducer = await sendTransport.produce({ track: track, appData: { type: "audio" } });
+
+  exec(
+    "ffmpeg -re -i ./assets/warbringer.mp3 -map 0:a -b:a 48k -maxrate 48k -c:a libopus -f rtp rtp://127.0.0.1:5030",
+  (err, stdout, stderr) => {
+    console.log(stderr);
+  });
 }
 /*
 

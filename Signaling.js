@@ -21,7 +21,7 @@ class Signaling {
     return this.eventemitter.once(event,  cb);
   }
 
-  authenticate() {
+  authenticate() { // start the authentication and join flow
     this.client.post("/channels/" + this.channelId + "/join_call").then(data => {
       this.emit("token", data);
       this.initWebSocket(data);
@@ -31,7 +31,7 @@ class Signaling {
   initWebSocket(data) {
     this.ws = new WebSocket("wss://vortex.revolt.chat"); // might need to whitelist this in your antivirus
     this.ws.on("open", () => {
-      // Send Authentication
+      // Send Authentication when the socket is ready
       const msg = JSON.stringify({ id: ++this.currId, type: "Authenticate", data: {
         token: data.token,
         roomId: this.channelId
