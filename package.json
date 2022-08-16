@@ -6,10 +6,16 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "files": [
+    "Media.js",
+    "Revoice.js",
+    "Signaling.js"
+  ],
   "author": "ShadowLp174",
   "license": "MIT",
   "dependencies": {
     "@discordjs/opus": "^0.8.0",
+    "ffmpeg": "^0.0.4",
     "fluent-ffmpeg": "^2.1.2",
     "msc-node": "^0.0.10",
     "prism-media": "^1.3.4",

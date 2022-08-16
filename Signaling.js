@@ -27,6 +27,15 @@ class Signaling {
       this.initWebSocket(data);
     });
   }
+  connect(channel) {
+    if (this.ws) this.disconnect();
+    this.channelId = channel;
+    this.authenticate();
+  }
+  disconnect() {
+    this.ws.close(1000);
+    this.currId = -1;
+  }
 
   initWebSocket(data) {
     this.ws = new WebSocket("wss://vortex.revolt.chat"); // might need to whitelist this in your antivirus
