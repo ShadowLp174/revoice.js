@@ -74,7 +74,7 @@ class Revoice {
     this.emit("join");
   }
   async play(media) {
-    return rtpProducer = await this.sendTransport.produce({ track: media.track, appData: { type: "audio" } });
+    return await this.sendTransport.produce({ track: media.track, appData: { type: "audio" } }); // rtpProducer
   }
 }
 
