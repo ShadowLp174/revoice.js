@@ -6,7 +6,7 @@ You still are able to play sound to a voice channel. Other features like channel
 
 **TODO**:
 
-- [ ] Play/Pause for the media class (help apreciated ;))
+- [ ] Play/Pause for the media class (help apreciated ;)) [ Kinda implemented already ]
 - [ ] Non-voice events like UserJoined and roominfo
 - [ ] Audio reception
 
@@ -31,11 +31,17 @@ const { Revoice, Media } = require("revoice.js");
 const revoice = new Revoice("the-token-of-your-bot");
 revoice.join("the-voice-channel-id");
 revoice.on("join", () => {
-  const media = new Media();
+  const media = new MediaPlayer();
   media.playFile("./assets/some-nice-song.mp3");
   // or something like the following:
   media.playStream(fs.createReadStream("./assets/some-nice-song.mp3"));
-  revoice.play(media);
+  revoice.play(media); // playing audio does only work after the the bot joined the voice channel
+
+  // ... pause it
+  media.pause();
+
+  // ... resume it later
+  media.resume();
 });
 ```
 
