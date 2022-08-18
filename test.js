@@ -2,6 +2,9 @@ const { API } = require("revolt-api");
 const Signaling = require("./Signaling.js");
 const fs = require("fs");
 const prism = require("prism-media");
+const { AudioContext } = require("web-audio-api");
+const { promisify } = require("util");
+const { pipeline } = require("stream");
 
 const { Device, useSdesMid, useAbsSendTime, MediaStreamTrack, RTCRtpCodecParameters, useFIR, useNACK, usePLI, useREMB } = require("msc-node");
 
@@ -55,31 +58,19 @@ async function initTransports(data) {
   socket.bind(5030);
 
   ffmpeg = require("child_process").spawn("ffmpeg", [
-    "-re", "-i", "-", "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + 5030
+    "-re", "-i", "-", "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:5030"
   ]);
 
   const stream = fs.createReadStream(__dirname + "\\assets\\warbringer.mp3");
-  /*opusEncoder.on("readable", () => {
-    console.log("readable");
-    while (true) {
-      let chunk = opusEncoder.read(960);
-      if (!chunk) break;
-      socket.send(chunk, 5030, "127.0.0.1");
-    }
-  });*/
+
   let paused = false;
   let currBuffer = new Buffer([]);
+  let currPos = null;
   stream.on("data", (chunk) => {
-    currBuffer = Buffer.concat([currBuffer, chunk]);
-    try {
-      if (paused) return;
-      console.log(paused);
-      if (typeof ffmpeg.pid != "number") return;
-      ffmpeg.stdin.write(chunk);
-    } catch(e) {
-      console.log(e);
-    }
-  });
+    currBuffer = Buffer.concat([currBuffer, Buffer.from(chunk)]);
+    if (paused) return;
+    ffmpeg.stdin.write(chunk);
+  })
 
   socket.addListener("message", (data) => {
     track.writeRtp(data);
@@ -87,7 +78,9 @@ async function initTransports(data) {
   ffmpeg.stdout.on("data", (chunk) => {
     console.log(Buffer.from(chunk).toString());
   });
-  let currPos = null;
+  ffmpeg.stdin.on("error", (e) => {
+    console.log("error");
+  });
   ffmpeg.stderr.on("data", (chunk) => {
     chunk = Buffer.from(chunk).toString(); // parse to string
     chunk = chunk.split(" ").map(el => el.trim()); // split by spaces and trim the items; useful for next step
@@ -102,7 +95,7 @@ async function initTransports(data) {
     ffmpeg.kill();
     setTimeout(() => {
       ffmpeg = require("child_process").spawn("ffmpeg", [
-        "-re", "-i", "-", "-ss", currPos, "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + 5030
+        "-re", "-i", "-","-ss", currPos, "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:5030"
       ]);
       ffmpeg.stdin.write(currBuffer);
       paused = false;
