@@ -4,6 +4,14 @@ This package is still in developement and lacks many features.
 
 You still are able to play sound to a voice channel. Other features like channel info will follow.
 
+**TODO**:
+
+- [ ] Play/Pause for the media class (help apreciated ;))
+- [ ] Non-voice events like UserJoined and roominfo
+- [ ] Audio reception
+
+*Disclamer: I might have forgotten some things on the list and thus it might be extended. Fell free to open issues to suggest new features :)*
+
 ## Installation
 
 This package uses ffmpeg as base so you'll have to install it properly [from the official site](https://ffmpeg.org/).  
