@@ -1,4 +1,20 @@
-const { API } = require("revolt-api");
+const { Revoice, MediaPlayer } = require("./index.js");
+const config = require("./config.json");
+
+const voice = new Revoice(config.token);
+voice.join("01GA8VZE79JGPEPBT6KEN54686");
+voice.on("join", () => {
+  const player = new MediaPlayer();
+  player.playFile("./assets/warbringer.mp3");
+  voice.play(player);
+  setTimeout(() => {
+    player.pause();
+    setTimeout(() => {
+      player.resume();
+    }, 2000);
+  }, 4000);
+})
+/*const { API } = require("revolt-api");
 const Signaling = require("./Signaling.js");
 const fs = require("fs");
 const prism = require("prism-media");
@@ -100,7 +116,7 @@ async function initTransports(data) {
       ffmpeg.stdin.write(currBuffer);
       paused = false;
     }, 2000);
-  },2000);
+  }, 2000);
 
   const rtpProducer = await sendTransport.produce({ track: track, appData: { type: "audio" } });
-}
+}*/
