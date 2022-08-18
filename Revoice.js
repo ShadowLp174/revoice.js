@@ -4,12 +4,13 @@ const EventEmitter = require("events");
 const { Device, useSdesMid, RTCRtpCodecParameters } = require("msc-node");
 
 class Revoice {
-  constructor(token) {
+  constructor(token, deaf=false) {
     this.api = new API({ authentication: { revolt: token }});
     this.signaling = new Signaling(this.api);
     this.setupSignaling();
 
     this.eventemitter = new EventEmitter();
+    this.deaf = deaf;
 
     this.device = new Device({
       headerExtensions: {
@@ -70,6 +71,11 @@ class Revoice {
         callback({ id });
       });
     });
+    /*const recvTransport = this.device.createRecvTransport({...data.data.recvTransport});
+    this.recvTransport = recvTransport;
+    recvTransport.on("connect", ({ dtlsParameters }, callback) => {
+      this.signaling.connectTransport(recvTransport.id, dtlsParameters).then(callback);
+    });*/
 
     this.emit("join");
   }

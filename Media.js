@@ -1,4 +1,3 @@
-
 const fs = require("fs");
 const { MediaStreamTrack } = require("msc-node");
 
@@ -33,10 +32,33 @@ class Media {
     const stream = fs.createReadStream(path);
     stream.pipe(this.ffmpeg.stdin);
   }
+  writeStreamChunk(chunk) {
+    if (!chunk) throw "You must pass a chunk to be written into the stream";
+    this.ffmpeg.stdin.write(chunk);
+  }
   playStream(stream) {
     if (!stream) throw "You must specify a stream to play!";
     stream.pipe(this.ffmpeg.stdin);
   }
 }
 
-module.exports = Media;
+class MediaPlayer {
+  constructor(logs=false, port=5030) {
+    this.media = new Media(logs, port);
+
+    this.paused = false;
+
+
+    return this;
+  }
+  pause() {
+
+  }
+  playStream(stream) {
+    stream.on("data", (chunk) => {
+      
+    });
+  }
+}
+
+module.exports = { Media };
