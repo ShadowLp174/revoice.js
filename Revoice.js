@@ -4,14 +4,8 @@ const EventEmitter = require("events");
 const { Device, useSdesMid, RTCRtpCodecParameters } = require("msc-node");
 
 class Revoice {
-  constructor(token) {
-    this.api = new API({ authentication: { revolt: token }});
-    this.signaling = new Signaling(this.api);
-    this.setupSignaling();
-
-    this.eventemitter = new EventEmitter();
-
-    this.device = new Device({
+  static createDevice() {
+    return new Device({
       headerExtensions: {
         audio: [
           useSdesMid(),
@@ -28,12 +22,35 @@ class Revoice {
         ]
       }
     });
+  }
+  static State =  {
+    OFFLINE: "off", // not joined anywhere
+    IDLE: "idle", // joined, but not playing
+    PLAYING: "playing", // joined and playing
+    JOINING: "joining", // join process active
+    UNKNOWN: "unknown" // online but a Media instance is used to play audio
+  }
+  constructor(token) {
+    this.api = new API({ authentication: { revolt: token }});
+    this.signaling = new Signaling(this.api);
+    this.setupSignaling();
+
+    this.eventemitter = new EventEmitter();
+
+    this.device = Revoice.createDevice();
+    this.media = null;
+
+    this.state = Revoice.State.OFFLINE;
 
     return this;
   }
+  updateState(state) {
+    this.state = state;
+    this.emit("state", state);
+  }
   setupSignaling() {
     const signaling = this.signaling
-    signaling.on("token", console.log);
+    //signaling.on("token", console.log);
     signaling.on("authenticate", (data) => {
       this.device.load({ routerRtpCapabilities: data.data.rtpCapabilities });
     });
@@ -53,11 +70,18 @@ class Revoice {
 
   disconnect() {
     this.signaling.disconnect();
-    this.sendTransport.disconnect();
+    this.sendTransport.close();
     this.sendTransport = undefined;
+    this.device = Revoice.createDevice();
   }
   join(channelId) {
+    this.updateState(Revoice.State.JOINING);
     this.signaling.connect(channelId);
+  }
+  leave() {
+    this.disconnect();
+    if (this.media) this.media.disconnect();
+    this.emit("leave");
   }
   async initTransports(data) {
     const sendTransport = this.device.createSendTransport({...data.data.sendTransport});
@@ -71,9 +95,15 @@ class Revoice {
       });
     });
 
+    this.updateState(Revoice.State.IDLE);
     this.emit("join");
   }
   async play(media) {
+    this.updateState(((media.track) ? Revoice.State.UNKNOWN : Revoice.State.PLAYING));
+    this.media = media;
+    this.media.on("finish", () => {
+      this.updateState(Revoice.State.IDLE);
+    });
     const track = (media.track) ? media.track : media.media.track; // second case for audioplayer
     return await this.sendTransport.produce({ track: track, appData: { type: "audio" } }); // rtpProducer
   }
