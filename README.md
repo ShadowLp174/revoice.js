@@ -11,7 +11,7 @@ You still are able to play sound to a voice channel. Other features like channel
 - [ ] Audio reception
 - [ ] Error Handling; Right now, you have to take care of things like stopping the music if you start to play another song while one is playing
 
-*Disclamer: I might have forgotten some things on the list and thus it might be extended. Fell free to open issues to suggest new features :)*
+*Disclamer: I might have forgotten some things on the list and thus it might be extended. Feel free to open issues to suggest new features :)*
 
 ## Installation
 
