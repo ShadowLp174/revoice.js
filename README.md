@@ -79,9 +79,9 @@ revoice.on("join", () => {
 
 #### Constructor:
 
-**`new MediaPlayer(logs?), port?)`**:
+**`new MediaPlayer(logs?, port?)`**:
 
-- Creates a new Revoice-compatible media object with basic sound controls like play/pause
+- Creates a new Revoice-compatible media player object with basic sound controls like play/pause
 - Parameters:
   - **`logs`**: typeof `Boolean`; Wether or not output ffmpeg logs in the console; Optional, default: `false`
   - **`port`**: typeof `int`; The port ffmpeg should send the rtp data to; Optional, defaults to `5030`
@@ -94,7 +94,7 @@ revoice.on("join", () => {
 - **`pause()`**: Pause the current playback if playing
 - **`resume()`**: Unpause the current playback if paused (This function is developement but working)
 - **`stop()`**: Completely stop the current playback; This can be used to stop a song to play another
-- **`on(event, callback)`**: Equally to EventEmitter.on, for supported events refer to: [The Events section](#Events)
+- **`on(event, callback)`**: Equally to EventEmitter.on, for supported events refer to: [The Events section](#events-1)
 - **`once(event, callback)`**: Equally to EventEmitter.once, refer to `on()`
 
 #### Events:
@@ -112,7 +112,7 @@ _**This class should only be used if you want to implement your own MediaPlayer 
 
 #### Constructor:
 
-**`new Media(logs?), port?)`**:
+**`new Media(logs?, port?)`**:
 
 - Creates a new Revoice-compatible media object
 - Parameters:
