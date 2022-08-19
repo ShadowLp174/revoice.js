@@ -108,6 +108,11 @@ class MediaPlayer {
       ...this.media.createFfmpegArgs()
     ]);
   }
+  cleanUp() { // TODO: similar to disconnect() but doesn't kill existing processes
+    this.paused = false;
+    this.currBuffer = null;
+    this.currTime = "00:00:00";
+  }
   pause() {
     if (this.paused) return;
     this.paused = true;
@@ -124,6 +129,9 @@ class MediaPlayer {
   stop() { // basically the same as process on disconnect
     return this.disconnect();
   }
+  getMediaTrack() {
+    this.media.getMediaTrack();
+  }
   playStream(stream) {
     if (!this.media.track) this.media.track = new MediaStreamTrack({ kind: "audio" });
 
@@ -131,6 +139,8 @@ class MediaPlayer {
     this.currBuffer = new Buffer([]);
     this.playing = true;
     this.streamFinished = false;
+
+    this.emit("start");
 
     stream.on("data", (chunk) => {
       this.currBuffer = Buffer.concat([ this.currBuffer, Buffer.from(chunk) ]);
@@ -159,6 +169,7 @@ class MediaPlayer {
         this.finishTimeout = setTimeout(() => { // TODO: I REALLY need a better way to do this
           if (this.streamFinished) {
             this.playing = false;
+            this.disconnect();
             this.emit("finish");
           }
         }, 2000);
