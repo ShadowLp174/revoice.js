@@ -4,6 +4,15 @@ This package is still in developement and lacks many features.
 
 You still are able to play sound to a voice channel. Other features like channel info will follow.
 
+**TODO**:
+
+- [ ] Play/Pause for the media class (help apreciated ;)) [ Kinda implemented already ]
+- [ ] Non-voice events like UserJoined and roominfo
+- [ ] Audio reception
+- [ ] Error Handling; Right now, you have to take care of things like stopping the music if you start to play another song while one is playing
+
+*Disclamer: I might have forgotten some things on the list and thus it might be extended. Fell free to open issues to suggest new features :)*
+
 ## Installation
 
 This package uses ffmpeg as base so you'll have to install it properly [from the official site](https://ffmpeg.org/).  
@@ -23,11 +32,17 @@ const { Revoice, Media } = require("revoice.js");
 const revoice = new Revoice("the-token-of-your-bot");
 revoice.join("the-voice-channel-id");
 revoice.on("join", () => {
-  const media = new Media();
+  const media = new MediaPlayer();
   media.playFile("./assets/some-nice-song.mp3");
   // or something like the following:
   media.playStream(fs.createReadStream("./assets/some-nice-song.mp3"));
-  revoice.play(media);
+  revoice.play(media); // playing audio does only work after the the bot joined the voice channel
+
+  // ... pause it
+  media.pause();
+
+  // ... resume it later
+  media.resume();
 });
 ```
 

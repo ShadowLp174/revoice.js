@@ -1,122 +1,55 @@
 const { Revoice, MediaPlayer } = require("./index.js");
+const { Client } = require("revolt.js");
 const config = require("./config.json");
+const ytdl = require('ytdl-core');
 
+const commands = [
+  "join",
+  "play",
+  "ping",
+  "pause",
+  "resume",
+  "leave",
+  "stop"
+]
+var prefix = "!";
+
+const client = new Client();
 const voice = new Revoice(config.token);
-voice.join("01GA8VZE79JGPEPBT6KEN54686");
-voice.on("join", () => {
-  const player = new MediaPlayer();
-  player.playFile("./assets/warbringer.mp3");
-  voice.play(player);
-  setTimeout(() => {
-    player.pause();
-    setTimeout(() => {
-      player.resume();
-    }, 2000);
-  }, 4000);
-})
-/*const { API } = require("revolt-api");
-const Signaling = require("./Signaling.js");
-const fs = require("fs");
-const prism = require("prism-media");
-const { AudioContext } = require("web-audio-api");
-const { promisify } = require("util");
-const { pipeline } = require("stream");
 
-const { Device, useSdesMid, useAbsSendTime, MediaStreamTrack, RTCRtpCodecParameters, useFIR, useNACK, usePLI, useREMB } = require("msc-node");
+client.on("ready", () => {
+  console.log("Logged in as " + client.user.username);
+});
 
-const bottoken = require("./config.json").token;
-const client = new API({ authentication: { revolt: bottoken }});
-const signaling = new Signaling(client, "01GA8VZE79JGPEPBT6KEN54686");
-signaling.on("token", console.log);
-signaling.on("authenticate", (data) => {
-  console.log(data);
-  device.load({ routerRtpCapabilities: data.data.rtpCapabilities });
-});
-signaling.on("initTransports", (data) => {
-  // init connection
-  console.log(data);
-  initTransports(data);
-});
-signaling.authenticate(); // start signaling flow
-const device = new Device({
-  headerExtensions: {
-    audio: [
-      useSdesMid(),
-    ]
-  },
-  codecs: {
-    audio: [
-      new RTCRtpCodecParameters({
-        mimeType: "audio/opus",
-        clockRate: 48000,
-        preferredPayloadType: 100,
-        channels: 2
-      })
-    ]
+let media = new MediaPlayer();
+client.on("message", (message) => {
+  if (message.content.toLowerCase().startsWith(prefix + commands[0])) {
+    const args = message.content.split(" ");
+    voice.join(args[1]);
+  } else if (message.content.toLowerCase().startsWith(prefix + commands[1])) {
+    const args = message.content.split(" ");
+    media.playStream(ytdl(args[1], {
+      filter: 'audioonly',
+      quality: 'highestaudio',
+      highWaterMark: 1024*1024*10, // 10mb
+      requestOptions: {
+        headers: {
+          "Cookie": "ID=" + new Date().getTime()
+        }
+      }
+    }, {highWaterMark: 1}));
+    voice.play(media);
+  } else if (message.content.toLowerCase().startsWith(prefix + commands[2])) {
+    message.reply("Pong");
+  } else if (message.content.toLowerCase().startsWith(prefix + commands[3])) {
+    media.pause();
+  } else if (message.content.toLowerCase().startsWith(prefix + commands[4])) {
+    media.resume();
+  } else if (message.content.toLowerCase().startsWith(prefix + commands[5])) {
+    voice.leave();
+  } else if (message.content.toLowerCase().startsWith(prefix + commands[6])) {
+    media.stop();
   }
 });
 
-async function initTransports(data) {
-  console.log("init");
-  const sendTransport = device.createSendTransport({...data.data.sendTransport});
-  sendTransport.on("connect", ({ dtlsParameters }, callback) => {
-    signaling.connectTransport(sendTransport.id, dtlsParameters).then(callback);
-  });
-  sendTransport.on("produce", (parameters, callback) => {
-    signaling.startProduce("audio", parameters.rtpParameters).then((id) => {
-      console.log(id);
-      callback({ id });
-    });
-  });
-
-  const track = new MediaStreamTrack({ kind: "audio" });
-  const socket = require("dgram").createSocket("udp4");
-  socket.bind(5030);
-
-  ffmpeg = require("child_process").spawn("ffmpeg", [
-    "-re", "-i", "-", "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:5030"
-  ]);
-
-  const stream = fs.createReadStream(__dirname + "\\assets\\warbringer.mp3");
-
-  let paused = false;
-  let currBuffer = new Buffer([]);
-  let currPos = null;
-  stream.on("data", (chunk) => {
-    currBuffer = Buffer.concat([currBuffer, Buffer.from(chunk)]);
-    if (paused) return;
-    ffmpeg.stdin.write(chunk);
-  })
-
-  socket.addListener("message", (data) => {
-    track.writeRtp(data);
-  });
-  ffmpeg.stdout.on("data", (chunk) => {
-    console.log(Buffer.from(chunk).toString());
-  });
-  ffmpeg.stdin.on("error", (e) => {
-    console.log("error");
-  });
-  ffmpeg.stderr.on("data", (chunk) => {
-    chunk = Buffer.from(chunk).toString(); // parse to string
-    chunk = chunk.split(" ").map(el => el.trim()); // split by spaces and trim the items; useful for next step
-    chunk = chunk.filter(el => el.startsWith("time")); // find the element indicating the time
-    chunk = chunk.join("").split("=")[1]; // extract the timestamp
-    if (!chunk) return;
-    currPos = chunk;
-  });
-
-  setTimeout(() => {
-    paused = true;
-    ffmpeg.kill();
-    setTimeout(() => {
-      ffmpeg = require("child_process").spawn("ffmpeg", [
-        "-re", "-i", "-","-ss", currPos, "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:5030"
-      ]);
-      ffmpeg.stdin.write(currBuffer);
-      paused = false;
-    }, 2000);
-  }, 2000);
-
-  const rtpProducer = await sendTransport.produce({ track: track, appData: { type: "audio" } });
-}*/
+client.loginBot(config.token);
