@@ -96,8 +96,8 @@ class MediaPlayer {
     return (hours * 60 * 60) + (minutes * 60) + currSeconds; // convert everything to seconds
   }
 
-  disconnect() { // this should be called on leave
-    this.media.track = null; // clean up the current data and streams
+  disconnect(destroy=true) { // this should be called on leave
+    if (destroy) this.media.track = null; // clean up the current data and streams
     this.originStream.destroy();
     this.paused = false;
     this.media.ffmpeg.kill();
@@ -128,7 +128,8 @@ class MediaPlayer {
     this.paused = false;
   }
   stop() { // basically the same as process on disconnect
-    return this.disconnect();
+    this.disconnect(false);
+    this.emit("finish");
   }
   getMediaTrack() {
     this.media.getMediaTrack();
@@ -144,6 +145,7 @@ class MediaPlayer {
     this.emit("start");
 
     stream.on("data", (chunk) => {
+      if (!chunk) return;
       this.currBuffer = Buffer.concat([ this.currBuffer, Buffer.from(chunk) ]);
       if (this.paused) return;
       this.media.writeStreamChunk(chunk);
