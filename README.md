@@ -20,7 +20,7 @@ After that, just execute `npm install revoice.js` to install the package, have f
 
 ## Usage
 
-TLDR; You initiate a client, you join a voice channel and then you play media.
+TL;DR: You initiate a client, you join a voice channel and then you play media.
 
 Media has to be created using the Media class. You can stream both node streams and media files to revolt.
 
@@ -45,6 +45,8 @@ revoice.on("join", () => {
   media.resume();
 });
 ```
+
+### Rejoice for Revoice!<!--lol-->
 
 ## API
 

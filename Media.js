@@ -124,6 +124,7 @@ class MediaPlayer {
     this.media.ffmpeg = require("child_process").spawn("ffmpeg", [
       ...this.media.createFfmpegArgs(this.currTime)
     ]);
+    this.#setupFmpeg();
     this.media.writeStreamChunk(this.currBuffer);
     this.paused = false;
   }
@@ -159,6 +160,9 @@ class MediaPlayer {
     });
 
     // ffmpeg stuff
+    this.#setupFmpeg();
+  }
+  #setupFmpeg() {
     this.media.ffmpeg.stderr.on("data", (chunk) => {
       if (this.logs) console.log("err", Buffer.from(chunk).toString());
       chunk = Buffer.from(chunk).toString(); // parse to string
@@ -186,7 +190,7 @@ class MediaPlayer {
     });
     this.media.ffmpeg.stdout.on("data", (chunk) => {
       if (this.logs) console.log("OUT", Buffer.from(chunk().toString()));
-    })
+    });
     this.media.ffmpeg.stdout.on("end", () => {
       this.playing = false;
       if (this.logs) console.log("finished");
@@ -194,11 +198,12 @@ class MediaPlayer {
     });
     this.media.ffmpeg.stdout.on("readable", () => {
       if (this.logs) console.log("readable")
-    })
+    });
     this.media.ffmpeg.stdin.on("error", (e) => {
       if (e.code == "EOF" || e.code == "EPIPE") return;
+      console.log("Media; ffmpeg; stdin: ");
       throw e
-    })
+    });
   }
   playFile(path) {
     return this.playStream(fs.createReadStream(path));
