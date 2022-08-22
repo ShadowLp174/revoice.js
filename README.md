@@ -27,12 +27,12 @@ Media has to be created using the Media class. You can stream both node streams 
 Example:
 
 ```JavaScript
-const { Revoice, Media } = require("revoice.js");
+const { Revoice, MediaPlayer } = require("revoice.js");
 
 const revoice = new Revoice("the-token-of-your-bot");
 revoice.join("the-voice-channel-id");
+const media = new MediaPlayer();
 revoice.on("join", () => {
-  const media = new MediaPlayer();
   media.playFile("./assets/some-nice-song.mp3");
   // or something like the following:
   media.playStream(fs.createReadStream("./assets/some-nice-song.mp3"));

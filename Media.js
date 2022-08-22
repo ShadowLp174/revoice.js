@@ -14,6 +14,7 @@ class Media {
     this.port = port;
     this.logs = logs;
     this.playing = false;
+    this.isMedia = true;
 
     this.ffmpeg = require("child_process").spawn("ffmpeg", [
       "-re", "-i", "-", "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + port
@@ -98,7 +99,7 @@ class MediaPlayer {
 
   disconnect(destroy=true) { // this should be called on leave
     if (destroy) this.media.track = null; // clean up the current data and streams
-    this.originStream.destroy();
+      this.originStream.destroy();
     this.paused = false;
     this.media.ffmpeg.kill();
     this.currBuffer = null;
@@ -132,20 +133,28 @@ class MediaPlayer {
     this.disconnect(false);
     this.emit("finish");
   }
-  getMediaTrack() {
+  get track() {
+    if (!this.media.track) this.media.track = new MediaStreamTrack({ kind: "audio" });
     this.media.getMediaTrack();
   }
+  set track(t) {
+    console.log("This should not be done.", t);
+  }
   playStream(stream) {
-    if (!this.media.track) this.media.track = new MediaStreamTrack({ kind: "audio" });
+    //if (!this.media.track) this.media.track = new MediaStreamTrack({ kind: "audio" });
 
     this.originStream = stream;
     this.currBuffer = new Buffer([]);
     this.playing = true;
     this.streamFinished = false;
 
-    this.emit("start");
+    this.started = false;
 
     stream.on("data", (chunk) => {
+      if (!this.started) {
+        this.emit("start");
+        this.started = true;
+      }
       if (!chunk) return;
       this.currBuffer = Buffer.concat([ this.currBuffer, Buffer.from(chunk) ]);
       if (this.paused) return;
@@ -176,7 +185,7 @@ class MediaPlayer {
         this.finishTimeout = setTimeout(() => { // TODO: I REALLY need a better way to do this
           if (this.streamFinished) {
             this.playing = false;
-            this.disconnect();
+            this.disconnect(false);
             this.emit("finish");
           }
         }, 2000);

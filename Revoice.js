@@ -99,10 +99,13 @@ class Revoice {
     this.emit("join");
   }
   async play(media) {
-    this.updateState(((media.track) ? Revoice.State.UNKNOWN : Revoice.State.PLAYING));
+    if (media.isMedia) this.updateState(Revoice.State.UNKNOWN);
     this.media = media;
     this.media.on("finish", () => {
       this.updateState(Revoice.State.IDLE);
+    });
+    this.media.on("start", () => {
+      this.updateState(Revoice.State.PLAYING);
     });
     const track = (media.track) ? media.track : media.media.track; // second case for audioplayer
     return await this.sendTransport.produce({ track: track, appData: { type: "audio" } }); // rtpProducer
