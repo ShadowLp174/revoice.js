@@ -28,6 +28,7 @@ Example:
 
 ```JavaScript
 const { Revoice, MediaPlayer } = require("revoice.js");
+const fs = require("fs");
 
 const revoice = new Revoice("the-token-of-your-bot");
 revoice.join("the-voice-channel-id");
