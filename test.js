@@ -21,7 +21,7 @@ client.on("ready", () => {
   console.log("Logged in as " + client.user.username);
 });
 
-let media = new MediaPlayer();
+let media = new MediaPlayer(true);
 client.on("message", (message) => {
   if (message.content.toLowerCase().startsWith(prefix + commands[0])) {
     const args = message.content.split(" ");
