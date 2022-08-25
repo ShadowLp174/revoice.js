@@ -18,16 +18,30 @@ class Media {
     const socket = this.socket;
     const stream = new require("stream").Readable({
       read: async function() {
-        socket.on("message", (msg) => {
-          this.push(msg);
-        })
+        this.push(await msg());
       }
     });
-    stream.on("readable", () => {
-      console.log(stream.read());
-    })
+    let t = null;
+    const packets = [];
+    let lastPacket = null;
+    stream.on("data", (d) => {
+      let time = Date.now();
+      if (!lastPacket) lastPacket = time;
+      console.log("d ", time - lastPacket);
+      lastPacket = time;
+      this.track.writeRtp(d);
+      if (!t) {
+        t = setTimeout(() => {
+          stream.pause();
+          setTimeout(() => {
+            stream.resume();
+          }, 3000);
+        }, 1000);
+      }
+    });
+
     this.socket.addListener("message", (data) => {
-      this.track.writeRtp(data);
+      //this.track.writeRtp(data);
     });
 
     this.port = port;
