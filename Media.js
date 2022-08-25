@@ -19,13 +19,13 @@ class Media {
     let intervals = [];
     let packets = [];
     this.opusPackets.on("data", (packet) => {
-      let time = Date.now();
+      /*let time = Date.now();
       if (!lastPacket) lastPacket = time;
       intervals.push(time - lastPacket);
       lastPacket = time + 2;
       packets.push(packet);
-      if (!writing) write();
-      //this.track.writeRtp(packet);
+      if (!writing) write();*/
+      this.track.writeRtp(packet);
     });
     var write = () => {
       if (packets.length == 0) return writing = false;
