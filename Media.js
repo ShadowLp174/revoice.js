@@ -8,41 +8,33 @@ class Media {
     this.track = new MediaStreamTrack({ kind: "audio" });
     this.socket = require("dgram").createSocket("udp4");
     this.socket.bind(port);
-    var msg = () => {
-      return new Promise((res) => {
-        socket.once("message", (msg) => {
-          res(msg);
-        });
-      });
-    }
-    const socket = this.socket;
-    const stream = new require("stream").Readable({
+    const _this = this;
+    this.opusPackets = new require("stream").Readable({
       read: async function() {
-        this.push(await msg());
+        this.push(await _this.getRtpMessage());
       }
     });
-    let t = null;
-    const packets = [];
     let lastPacket = null;
-    stream.on("data", (d) => {
+    let writing = false;
+    let intervals = [];
+    let packets = [];
+    this.opusPackets.on("data", (packet) => {
       let time = Date.now();
       if (!lastPacket) lastPacket = time;
-      console.log("d ", time - lastPacket);
-      lastPacket = time;
-      this.track.writeRtp(d);
-      if (!t) {
-        t = setTimeout(() => {
-          stream.pause();
-          setTimeout(() => {
-            stream.resume();
-          }, 3000);
-        }, 1000);
-      }
+      intervals.push(time - lastPacket);
+      lastPacket = time + 2;
+      packets.push(packet);
+      if (!writing) write();
+      //this.track.writeRtp(packet);
     });
-
-    this.socket.addListener("message", (data) => {
-      //this.track.writeRtp(data);
-    });
+    var write = () => {
+      if (packets.length == 0) return writing = false;
+      writing = true;
+      let interval = intervals.shift();
+      let packet = packets.shift();
+      this.track.writeRtp(packet);
+      setTimeout(write, interval);
+    }
 
     this.port = port;
     this.logs = logs;
@@ -70,6 +62,13 @@ class Media {
     return "Unimplemented";
   }
 
+  getRtpMessage() {
+    return new Promise((res) => {
+      this.socket.once("message", (msg) => {
+        res(msg);
+      });
+    });
+  }
   createFfmpegArgs(start="00:00:00") {
     return ["-re", "-i", "-", "-ss", start, "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "-"]
   }
@@ -151,15 +150,11 @@ class MediaPlayer {
   pause() {
     if (this.paused) return;
     this.paused = true;
-    this.media.ffmpeg.kill();
+    this.media.opusPackets.pause();
   }
   resume() {
     if (!this.paused) return;
-    this.media.ffmpeg = require("child_process").spawn(ffmpeg, [
-      ...this.media.createFfmpegArgs(this.currTime)
-    ]);
-    this.#setupFmpeg();
-    this.media.writeStreamChunk(this.currBuffer);
+    this.media.opusPackets.resume();
     this.paused = false;
   }
   stop() { // basically the same as process on disconnect
