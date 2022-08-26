@@ -16,15 +16,31 @@ class Media {
     });
     let lastPacket = null;
     let writing = false;
+    let paused = false;
     let intervals = [];
     let packets = [];
-    this.opusPackets.on("data", (packet) => {
-      /*let time = Date.now();
+    var save = (packet) => {
+      let time = Date.now();
       if (!lastPacket) lastPacket = time;
       intervals.push(time - lastPacket);
       lastPacket = time + 2;
       packets.push(packet);
-      if (!writing) write();*/
+    }
+    let first = true;
+    this.opusPackets.on("data", (packet) => {
+      if (first) {
+        setTimeout(()=> {
+          pause();
+          setTimeout(resume, 2000);
+        }, 2000);
+        first = false;
+      }
+      if (paused) {
+        return save(packet);
+      }
+      if (intervals.length == 0) {
+        paused = false;
+      }
       this.track.writeRtp(packet);
     });
     var write = () => {
@@ -34,6 +50,12 @@ class Media {
       let packet = packets.shift();
       this.track.writeRtp(packet);
       setTimeout(write, interval);
+    }
+    var pause = () => {
+      paused = true;
+    }
+    var resume = () => {
+      write();
     }
 
     this.port = port;
