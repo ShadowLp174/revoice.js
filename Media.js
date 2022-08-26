@@ -4,7 +4,7 @@ const fs = require("fs");
 const ffmpeg = require("ffmpeg-static");
 
 class Media {
-  constructor(logs=false, port=5030) {
+  constructor(logs=false, port=5030, packetHandler=(packet)=>{this.track.writeRtp(packet);}) {
     this.track = new MediaStreamTrack({ kind: "audio" });
     this.socket = require("dgram").createSocket("udp4");
     this.socket.bind(port);
@@ -14,6 +14,7 @@ class Media {
         this.push(await _this.getRtpMessage());
       }
     });
+
     let lastPacket = null;
     let writing = false;
     let paused = false;
@@ -28,6 +29,7 @@ class Media {
     }
     let first = true;
     this.opusPackets.on("data", (packet) => {
+      //packetHandler(packet);
       if (first) {
         setTimeout(()=> {
           pause();
@@ -48,8 +50,10 @@ class Media {
       writing = true;
       let interval = intervals.shift();
       let packet = packets.shift();
-      this.track.writeRtp(packet);
-      setTimeout(write, interval);
+      setTimeout(() => {
+        this.track.writeRtp(packet);
+        write();
+      }, interval);
     }
     var pause = () => {
       paused = true;
@@ -91,6 +95,9 @@ class Media {
       });
     });
   }
+  packetHandler() {
+
+  }
   createFfmpegArgs(start="00:00:00") {
     return ["-re", "-i", "-", "-ss", start, "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "-"]
   }
@@ -112,9 +119,15 @@ class Media {
   }
 }
 
-class MediaPlayer {
+class MediaPlayer {// extends Media {
   constructor(logs=false, port=5030) {
-    this.media = new Media(logs, port);
+    //super(logs, port);
+    this.media = new Media(logs, port, /*(packet) => {
+      if (this.paused) {
+        return this.save(packet);
+      }
+      this.track.writeRtp(packet);
+    }*/);
 
     this.emitter = new EventEmitter();
 
@@ -124,6 +137,13 @@ class MediaPlayer {
     this.finishTimeout = null;
     this.currBuffer = new Buffer([]);
     this.logs = logs;
+
+    this.packets = [];
+    this.intervals = [];
+    this.lastPacket = null;
+    this.paused = false;
+    this.intervals = [];
+    this.packets = [];
 
     return this;
   }
@@ -151,6 +171,22 @@ class MediaPlayer {
     return (hours * 60 * 60) + (minutes * 60) + currSeconds; // convert everything to seconds
   }
 
+  _save(packet) {
+    let time = Date.now();
+    if (!this.lastPacket) this.lastPacket = time;
+    this.intervals.push(time - this.lastPacket);
+    this.lastPacket = time + 2;
+    this.packets.push(packet);
+  }
+  _write() {
+    if (this.packets.length == 0) { this.paused = false; return this.writing = false;}
+    this.writing = true;
+    let interval = this.intervals.shift();
+    let packet = this.packets.shift();
+    setTimeout(() => {
+      this.track.writeRtp(packet)
+    }, interval);
+  }
   disconnect(destroy=true) { // this should be called on leave
     if (destroy) this.media.track = null; // clean up the current data and streams
     this.originStream.destroy();
