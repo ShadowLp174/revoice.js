@@ -27,10 +27,10 @@ class Media {
       lastPacket = time + 2;
       packets.push(packet);
     }
-    let first = true;
+    //let first = true;
     this.opusPackets.on("data", (packet) => {
-      //packetHandler(packet);
-      if (first) {
+      packetHandler(packet); // defined in the constructor params
+      /*if (first) {
         setTimeout(()=> {
           pause();
           setTimeout(resume, 2000);
@@ -43,7 +43,7 @@ class Media {
       if (intervals.length == 0) {
         paused = false;
       }
-      this.track.writeRtp(packet);
+      this.track.writeRtp(packet);*/
     });
     var write = () => {
       if (packets.length == 0) return writing = false;
@@ -119,15 +119,21 @@ class Media {
   }
 }
 
-class MediaPlayer {// extends Media {
-  constructor(logs=false, port=5030) {
-    //super(logs, port);
-    this.media = new Media(logs, port, /*(packet) => {
+class MediaPlayer extends Media {
+  constructor(logs=false, port=5031) {
+    super(logs, port, (packet) => {
+      if (this.paused) {
+        return this._save(packet);
+      }
+      this.track.writeRtp(packet);
+    });
+    this.isMediaPlayer = true;
+    /*this = new Media(logs, port, (packet) => {
       if (this.paused) {
         return this.save(packet);
       }
       this.track.writeRtp(packet);
-    }*/);
+    });*/
 
     this.emitter = new EventEmitter();
 
@@ -142,8 +148,6 @@ class MediaPlayer {// extends Media {
     this.intervals = [];
     this.lastPacket = null;
     this.paused = false;
-    this.intervals = [];
-    this.packets = [];
 
     return this;
   }
@@ -184,20 +188,21 @@ class MediaPlayer {// extends Media {
     let interval = this.intervals.shift();
     let packet = this.packets.shift();
     setTimeout(() => {
-      this.track.writeRtp(packet)
+      this.track.writeRtp(packet);
+      this._write();
     }, interval);
   }
   disconnect(destroy=true) { // this should be called on leave
-    if (destroy) this.media.track = null; // clean up the current data and streams
+    if (destroy) this.track = null; // clean up the current data and streams
     this.originStream.destroy();
     this.paused = false;
-    this.media.ffmpeg.kill();
+    this.ffmpeg.kill();
     this.currBuffer = null;
     this.streamFinished = true;
     this.currTime = "00:00:00";
 
-    this.media.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
-      ...this.media.createFfmpegArgs()
+    this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
+      ...this.createFfmpegArgs()
     ]);
   }
   cleanUp() { // TODO: similar to disconnect() but doesn't kill existing processes
@@ -208,26 +213,27 @@ class MediaPlayer {// extends Media {
   pause() {
     if (this.paused) return;
     this.paused = true;
-    this.media.opusPackets.pause();
+    //this.opusPackets.pause();
   }
   resume() {
     if (!this.paused) return;
-    this.media.opusPackets.resume();
-    this.paused = false;
+    this._write();
+    //this.opusPackets.resume();
+    //this.paused = false;
   }
   stop() { // basically the same as process on disconnect
     this.disconnect(false);
     this.emit("finish");
   }
-  get track() {
-    if (!this.media.track) this.media.track = new MediaStreamTrack({ kind: "audio" });
-    this.media.getMediaTrack();
+  get streamTrack() {
+    if (!this.track) this.track = new MediaStreamTrack({ kind: "audio" });
+    this.getMediaTrack();
   }
-  set track(t) {
+  set streamTrack(t) {
     console.log("This should not be done.", t);
   }
-  playStream(stream) {
-    //if (!this.media.track) this.media.track = new MediaStreamTrack({ kind: "audio" });
+  /*playStream(stream) {
+    //if (!this.track) this.track = new MediaStreamTrack({ kind: "audio" });
 
     this.originStream = stream;
     this.currBuffer = new Buffer([]);
@@ -244,7 +250,7 @@ class MediaPlayer {// extends Media {
       if (!chunk) return;
       this.currBuffer = Buffer.concat([ this.currBuffer, Buffer.from(chunk) ]);
       if (this.paused) return;
-      this.media.writeStreamChunk(chunk);
+      this.writeStreamChunk(chunk);
     });
     stream.on("end", () => {
       this.streamFinished = true;
@@ -256,9 +262,9 @@ class MediaPlayer {// extends Media {
 
     // ffmpeg stuff
     this.#setupFmpeg();
-  }
+  }*/
   #setupFmpeg() {
-    this.media.ffmpeg.stderr.on("data", (chunk) => {
+    this.ffmpeg.stderr.on("data", (chunk) => {
       if (this.logs) console.log("err", Buffer.from(chunk).toString());
       chunk = Buffer.from(chunk).toString(); // parse to string
       if (chunk.includes("time")) {  // get the current seek pos
@@ -283,26 +289,26 @@ class MediaPlayer {// extends Media {
         if (this.logs) console.log("Audio duration: ", MediaPlayer.timestampToSeconds(chunk));
       }
     });
-    this.media.ffmpeg.stdout.on("data", (chunk) => {
+    this.ffmpeg.stdout.on("data", (chunk) => {
       if (this.logs) console.log("OUT", Buffer.from(chunk().toString()));
     });
-    this.media.ffmpeg.stdout.on("end", () => {
+    this.ffmpeg.stdout.on("end", () => {
       this.playing = false;
       if (this.logs) console.log("finished");
       this.emit("finish");
     });
-    this.media.ffmpeg.stdout.on("readable", () => {
+    this.ffmpeg.stdout.on("readable", () => {
       if (this.logs) console.log("readable")
     });
-    this.media.ffmpeg.stdin.on("error", (e) => {
+    this.ffmpeg.stdin.on("error", (e) => {
       if (e.code == "EOF" || e.code == "EPIPE") return;
       console.log("Media; ffmpeg; stdin: ");
       throw e
     });
   }
-  playFile(path) {
+  /*playFile(path) {
     return this.playStream(fs.createReadStream(path));
-  }
+  }*/
 }
 
 module.exports = { Media, MediaPlayer };
