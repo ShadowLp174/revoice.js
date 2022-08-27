@@ -6,7 +6,7 @@ You still are able to play sound to a voice channel. Other features like channel
 
 **TODO**:
 
-- [ ] Play/Pause for the media class (help apreciated ;)) [ Kinda implemented already ]
+- [X] Play/Pause for the media class (help apreciated ;)) [ Kinda implemented already ]
 - [ ] Non-voice events like UserJoined and roominfo
 - [ ] Audio reception
 - [ ] Error Handling; Right now, you have to take care of things like stopping the music if you start to play another song while one is playing
@@ -21,7 +21,9 @@ Just execute `npm install revoice.js` to install the package, have fun! :)
 
 TL;DR: You initiate a client, you join a voice channel and then you play media.
 
-Media has to be created using the Media class. You can stream both node streams and media files to revolt.
+Please note that unlike on Discord bots, Revolt bots are able to join multiple voice channels at once. Thus a single bot is able to be in every voice channel it has access to. I have no idea about the limitations.
+
+Media has to be created using the MediaPlayer class. You can stream both node streams and media files to revolt.
 
 Example:
 
@@ -30,13 +32,16 @@ const { Revoice, MediaPlayer } = require("revoice.js");
 const fs = require("fs");
 
 const revoice = new Revoice("the-token-of-your-bot");
-revoice.join("the-voice-channel-id");
+const connection = await revoice.join("the-voice-channel-id");
 const media = new MediaPlayer();
-revoice.on("join", () => {
+connection.on("join", () => {
   media.playFile("./assets/some-nice-song.mp3");
   // or something like the following:
   media.playStream(fs.createReadStream("./assets/some-nice-song.mp3"));
-  revoice.play(media); // playing audio does only work after the the bot joined the voice channel
+  connection.play(media); // playing audio does only work after the the bot joined the voice channel
+
+  // you don't have to store the voice connection, you can retrieve it if you have the id of the voice channel like this:
+  const con = revoice.getVoiceConnection("someChannelId");
 
   // ... pause it
   media.pause();
@@ -56,9 +61,15 @@ revoice.on("join", () => {
 
 - **`on(event, callback)`**: Equally to EventEmitter.on, for supported events refer to: [The Events section](#Events)
 - **`once(event, callback)`**: Equally to EventEmitter.once, refer to `on()`
-- **`disconnect()`**: Disconnect from the current voice channel
-- **`join(channelId)`**: Connect to a voice channel; `channelId` typeof `Number`
+- **`join(channelId)`**: Connect to a voice channel;  `channelId` typeof `String`
+- **`getVoiceConnection(channelId)`**: Returns the voice connection to the given channel; Params: `channelId` typeof `String`
+
+### VoiceConnection
+
+#### Properties/Methods:
+
 - **`play(media)`**: Stream a [MediaPlayer](#MediaPlayer)(Or Media) object to the current voice channel
+- **`leave()`**: Leave the voice channel and destroy the connection
 
 #### Events:
 
