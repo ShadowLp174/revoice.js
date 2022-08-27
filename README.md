@@ -15,8 +15,7 @@ You still are able to play sound to a voice channel. Other features like channel
 
 ## Installation
 
-This package uses ffmpeg as base so you'll have to install it properly [from the official site](https://ffmpeg.org/).  
-After that, just execute `npm install revoice.js` to install the package, have fun! :)
+Just execute `npm install revoice.js` to install the package, have fun! :)
 
 ## Usage
 
