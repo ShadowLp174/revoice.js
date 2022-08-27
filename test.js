@@ -3,6 +3,11 @@ const { Client } = require("revolt.js");
 const config = require("./config.json");
 const ytdl = require('ytdl-core');
 
+if (!config.token) {
+  console.log("Config file invalid. Missing bot token");
+  exit(0);
+}
+
 const commands = [
   "join",
   "play",
@@ -18,8 +23,18 @@ const client = new Client();
 const voice = new Revoice(config.token);
 
 client.on("ready", () => {
+  client.users.edit({
+    status: {
+      text: "by RedTech",
+      presence: "Online"
+    }
+  })
   console.log("Logged in as " + client.user.username);
 });
+
+voice.on("state", (s) => {
+  console.log(s);
+})
 
 let media = new MediaPlayer(true);
 client.on("message", (message) => {

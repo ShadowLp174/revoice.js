@@ -26,7 +26,9 @@ class Revoice {
   static State =  {
     OFFLINE: "off", // not joined anywhere
     IDLE: "idle", // joined, but not playing
+    BUFFERING: "buffer", // joined, buffering data
     PLAYING: "playing", // joined and playing
+    PAUSED: "paused", // joined and paused
     JOINING: "joining", // join process active
     UNKNOWN: "unknown" // online but a Media instance is used to play audio
   }
@@ -99,10 +101,19 @@ class Revoice {
     this.emit("join");
   }
   async play(media) {
-    this.updateState(((!media.isMediaPlayer) ? Revoice.State.UNKNOWN : Revoice.State.PLAYING));
+    this.updateState(((!media.isMediaPlayer) ? Revoice.State.UNKNOWN : Revoice.State.BUFFERING));
     this.media = media;
     this.media.on("finish", () => {
       this.updateState(Revoice.State.IDLE);
+    });
+    this.media.on("buffer", () => {
+      this.updateState(Revoice.State.BUFFERING);
+    });
+    this.media.on("start", () => {
+      this.updateState(Revoice.State.PLAYING);
+    });
+    this.media.on("pause", () => {
+      this.updateState(Revoice.State.PAUSED);
     });
     const track = media.track;
     return await this.sendTransport.produce({ track: track, appData: { type: "audio" } }); // rtpProducer
