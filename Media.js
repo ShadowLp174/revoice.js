@@ -1,14 +1,22 @@
 const { MediaStreamTrack } = require("msc-node");
 const EventEmitter = require("events");
 const fs = require("fs");
+const ffmpeg = require("ffmpeg-static");
 
 class Media {
-  constructor(logs=false, port=5030) {
+  constructor(logs=false, port=5030, packetHandler=(packet)=>{this.track.writeRtp(packet);}) {
     this.track = new MediaStreamTrack({ kind: "audio" });
     this.socket = require("dgram").createSocket("udp4");
     this.socket.bind(port);
-    this.socket.addListener("message", (data) => {
-      this.track.writeRtp(data);
+
+    const _this = this;
+    this.opusPackets = new require("stream").Readable({
+      read: async function() {
+        this.push(await _this.getRtpMessage());
+      }
+    });
+    this.opusPackets.on("data", (packet) => {
+      packetHandler(packet); // defined in the constructor params
     });
 
     this.port = port;
@@ -16,7 +24,7 @@ class Media {
     this.playing = false;
     this.isMedia = true;
 
-    this.ffmpeg = require("child_process").spawn("ffmpeg", [
+    this.ffmpeg = require("child_process").spawn(ffmpeg, [
       "-re", "-i", "-", "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + port
     ]);
     if (logs) {
@@ -37,6 +45,13 @@ class Media {
     return "Unimplemented";
   }
 
+  getRtpMessage() {
+    return new Promise((res) => {
+      this.socket.once("message", (msg) => {
+        res(msg);
+      });
+    });
+  }
   createFfmpegArgs(start="00:00:00") {
     return ["-re", "-i", "-", "-ss", start, "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + this.port]
   }
@@ -58,18 +73,26 @@ class Media {
   }
 }
 
-class MediaPlayer {
+class MediaPlayer extends Media {
   constructor(logs=false, port=5030) {
-    this.media = new Media(logs, port);
+    super(logs, port, (packet) => {
+      if (this.paused) {
+        return this._save(packet);
+      }
+      if (packet == "FINISHPACKET") return this.finished();
+      this.track.writeRtp(packet);
+    });
+    this.isMediaPlayer = true;
 
     this.emitter = new EventEmitter();
 
-    this.paused = false;
     this.currTime = null;
-    this.streamFinished = false;
-    this.finishTimeout = null;
-    this.currBuffer = new Buffer([]);
     this.logs = logs;
+    this.started = false;
+    this.packets = [];
+    this.intervals = [];
+    this.lastPacket = null;
+    this.paused = false;
 
     return this;
   }
@@ -97,18 +120,49 @@ class MediaPlayer {
     return (hours * 60 * 60) + (minutes * 60) + currSeconds; // convert everything to seconds
   }
 
+  _save(packet) {
+    let time = Date.now();
+    if (!this.lastPacket) this.lastPacket = time;
+    this.intervals.push(time - this.lastPacket);
+    this.lastPacket = time + 2;
+    this.packets.push(packet);
+  }
+  _write() {
+    if (this.packets.length == 0) { this.paused = false; return this.writing = false;}
+    this.writing = true;
+    let interval = this.intervals.shift();
+    let packet = this.packets.shift();
+    setTimeout(() => {
+      if (packet == "FINISHPACKET") {
+        this.finished();
+        return this._write();
+      }
+      this.track.writeRtp(packet);
+      this._write();
+    }, interval);
+  }
   disconnect(destroy=true) { // this should be called on leave
-    if (destroy) this.media.track = null; // clean up the current data and streams
-      this.originStream.destroy();
+    if (destroy) this.track = new MediaStreamTrack({ kind: "audio" }); // clean up the current data and streams
     this.paused = false;
-    this.media.ffmpeg.kill();
-    this.currBuffer = null;
-    this.streamFinished = true;
+    this.ffmpeg.kill();
+    this.originStream.destroy();
     this.currTime = "00:00:00";
 
-    this.media.ffmpeg = require("child_process").spawn("ffmpeg", [ // set up new ffmpeg instance
-      ...this.media.createFfmpegArgs()
+    this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
+      ...this.createFfmpegArgs()
     ]);
+    this.packets = [];
+    this.intervals = [];
+    this.opusPackets.once("data", () => {
+      this.started = true;
+      this.emit("start");
+    });
+    this.#setupFmpeg();
+  }
+  finished() {
+    this.playing = false;
+    this.disconnect(false);
+    this.emit("finish");
   }
   cleanUp() { // TODO: similar to disconnect() but doesn't kill existing processes
     this.paused = false;
@@ -118,61 +172,45 @@ class MediaPlayer {
   pause() {
     if (this.paused) return;
     this.paused = true;
-    this.media.ffmpeg.kill();
+    this.emit("pause");
   }
   resume() {
     if (!this.paused) return;
-    this.media.ffmpeg = require("child_process").spawn("ffmpeg", [
-      ...this.media.createFfmpegArgs(this.currTime)
-    ]);
-    this.#setupFmpeg();
-    this.media.writeStreamChunk(this.currBuffer);
     this.paused = false;
+    this.emit("start");
+    this._write();
   }
   stop() { // basically the same as process on disconnect
     this.disconnect(false);
     this.emit("finish");
   }
-  get track() {
-    if (!this.media.track) this.media.track = new MediaStreamTrack({ kind: "audio" });
-    this.media.getMediaTrack();
+  get streamTrack() {
+    if (!this.track) this.track = new MediaStreamTrack({ kind: "audio" });
+    this.getMediaTrack();
   }
-  set track(t) {
+  set streamTrack(t) {
     console.log("This should not be done.", t);
   }
   playStream(stream) {
-    //if (!this.media.track) this.media.track = new MediaStreamTrack({ kind: "audio" });
-
-    this.originStream = stream;
-    this.currBuffer = new Buffer([]);
-    this.playing = true;
-    this.streamFinished = false;
-
+    this.emit("buffer");
     this.started = false;
-
-    stream.on("data", (chunk) => {
-      if (!this.started) {
-        this.emit("start");
-        this.started = true;
-      }
-      if (!chunk) return;
-      this.currBuffer = Buffer.concat([ this.currBuffer, Buffer.from(chunk) ]);
-      if (this.paused) return;
-      this.media.writeStreamChunk(chunk);
-    });
-    stream.on("end", () => {
+    this.streamFinished = false;
+    this.originStream = stream;
+    this.originStream.on("end", () => {
       this.streamFinished = true;
     });
-    stream.on("error", (e) => {
-      this.streamFinished = true;
-      console.log("Audio source stream error: ", e);
+    this.opusPackets.once("data", () => {
+      this.started = true;
+      this.emit("start");
     });
 
     // ffmpeg stuff
     this.#setupFmpeg();
+
+    super.playStream(stream); // start playing
   }
   #setupFmpeg() {
-    this.media.ffmpeg.stderr.on("data", (chunk) => {
+    this.ffmpeg.stderr.on("data", (chunk) => {
       if (this.logs) console.log("err", Buffer.from(chunk).toString());
       chunk = Buffer.from(chunk).toString(); // parse to string
       if (chunk.includes("time")) {  // get the current seek pos
@@ -184,9 +222,14 @@ class MediaPlayer {
         if (this.finishTimeout) clearTimeout(this.finishTimeout);
         this.finishTimeout = setTimeout(() => { // TODO: I REALLY need a better way to do this
           if (this.streamFinished) {
-            this.playing = false;
-            this.disconnect(false);
-            this.emit("finish");
+            this.socket.send("FINISHPACKET", this.port);
+            // reset ffmpeg to prepare for next stream
+            this.ffmpeg.kill();
+            this.originStream.destroy();
+            this.currTime = "00:00:00";
+            this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
+              ...this.createFfmpegArgs()
+            ]);
           }
         }, 2000);
       } else if (chunk.trim().toLowerCase().includes("duration")) { // get the duration in seconds
@@ -197,25 +240,22 @@ class MediaPlayer {
         if (this.logs) console.log("Audio duration: ", MediaPlayer.timestampToSeconds(chunk));
       }
     });
-    this.media.ffmpeg.stdout.on("data", (chunk) => {
+    this.ffmpeg.stdout.on("data", (chunk) => {
       if (this.logs) console.log("OUT", Buffer.from(chunk().toString()));
     });
-    this.media.ffmpeg.stdout.on("end", () => {
+    this.ffmpeg.stdout.on("end", () => {
       this.playing = false;
       if (this.logs) console.log("finished");
       this.emit("finish");
     });
-    this.media.ffmpeg.stdout.on("readable", () => {
+    this.ffmpeg.stdout.on("readable", () => {
       if (this.logs) console.log("readable")
     });
-    this.media.ffmpeg.stdin.on("error", (e) => {
+    this.ffmpeg.stdin.on("error", (e) => {
       if (e.code == "EOF" || e.code == "EPIPE") return;
       console.log("Media; ffmpeg; stdin: ");
       throw e
     });
-  }
-  playFile(path) {
-    return this.playStream(fs.createReadStream(path));
   }
 }
 

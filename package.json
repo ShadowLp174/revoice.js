@@ -1,10 +1,10 @@
 {
   "name": "revoice.js",
-  "version": "0.1.44",
+  "version": "0.1.5",
   "description": "A voice module for Revolt",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified. For tests see experimental branch.\" && exit 1"
   },
   "keywords": [
     "voice",
@@ -32,6 +32,7 @@
   "author": "ShadowLp174",
   "license": "MIT",
   "dependencies": {
+    "ffmpeg-static": "^5.0.2",
     "msc-node": "^0.0.10",
     "revolt-api": "^0.5.5",
     "ws": "^8.8.1"

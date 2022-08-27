@@ -69,6 +69,8 @@ revoice.on("join", () => {
     - **State.IDLE**: The bot is in a voice channel but isn't doesn't play anything
     - **State.JOINING**: The bot is currently in the join process
     - **State.PLAYING**: The bot is in a voice channel and transmitting sound
+    - **State.BUFFERING**: The bot is in a voice channel and there is a stream with audio buffering
+    - **State.PAUSED**: The bot is in a voice channel and the audio has been paused
     - **State.UNKNOWN**: The bot is in a voice channel and _might_ be playing something. This occurs when you choose to use the Media class as the Media class just contains some base functionality
 - **join**:
   - Data: _empty_
@@ -86,9 +88,11 @@ revoice.on("join", () => {
 - Creates a new Revoice-compatible media player object with basic sound controls like play/pause
 - Parameters:
   - **`logs`**: typeof `Boolean`; Wether or not output ffmpeg logs in the console; Optional, default: `false`
-  - **`port`**: typeof `int`; The port ffmpeg should send the rtp data to; Optional, defaults to `5030`
+  - **`port`**: typeof `int`; The port ffmpeg should send the rtp data to; Optional but should be changed if wanting to run multiple instances, defaults to `5030`
 
 #### Properties/Methods:
+
+**Inherits from the Media class**
 
 - **`getMediaTrack()`**: Get the MediaStreamTrack used for WebRTC transports
 - **`playFile(path)`**: Play the file from the given filePath; Param typeof `String`
