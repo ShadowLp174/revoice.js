@@ -81,6 +81,13 @@ class VoiceConnection {
     this.sendTransport = undefined;
     this.device = Revoice.createDevice();
   }
+  destroy() {
+    return new Promise(async (res) => {
+      this.disconnect();
+      if (this.media) await this.media.destroy();
+      res();
+    })
+  }
   leave() {
     this.disconnect();
     if (this.media) this.media.disconnect();
