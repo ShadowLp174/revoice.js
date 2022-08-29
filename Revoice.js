@@ -96,6 +96,13 @@ class VoiceConnection {
       });
     });
   }
+  destroy() {
+    return new Promise(async (res) => {
+      this.disconnect();
+      if (this.media) await this.media.destroy();
+      res();
+    })
+  }
   async leave() {
     await this.disconnect();
     if (this.media) this.media.disconnect();
