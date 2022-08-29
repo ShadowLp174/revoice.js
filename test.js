@@ -58,6 +58,10 @@ client.on("message", (message) => {
       m = new MediaPlayer(false, 5030 + (++currPlayerPort));
       media.set(args[1], m);
     }
+    const connection = voice.getVoiceConnection(args[1]);
+    if (!connection.media) { // should be called before playing
+      connection.play(m);
+    }
     m.playStream(ytdl(args[2], {
       filter: 'audioonly',
       quality: 'highestaudio',
@@ -68,10 +72,6 @@ client.on("message", (message) => {
         }
       }
     }, {highWaterMark: 1}));
-    const connection = voice.getVoiceConnection(args[1]);
-    if (!connection.media) {
-      connection.play(m);
-    }
   } else if (message.content.toLowerCase().startsWith(prefix + commands[2])) {
     message.reply("Pong");
   } else if (message.content.toLowerCase().startsWith(prefix + commands[3])) {
