@@ -71,14 +71,6 @@ class Media {
     if (!stream) throw "You must specify a stream to play!";
     stream.pipe(this.ffmpeg.stdin);
   }
-  destroy() {
-    return new Promise((res, rej) => {
-      this.track = null;
-      this.ffmpeg.kill();
-      this.opusPackets.destroy();
-      this.socket.close(res);
-    });
-  }
 }
 
 class MediaPlayer extends Media {
@@ -167,18 +159,8 @@ class MediaPlayer extends Media {
     });
     this.#setupFmpeg();
   }
-  destroy() {
-    return Promise.all([
-      super.destroy(),
-      new Promise((res) => {
-        this.packets = [];
-        this.intervals = [];
-        this.originStream.destroy();
-        res();
-      })
-    ]);
-  }
   finished() {
+    this.track = new MediaStreamTrack({ kind: "audio" });
     this.playing = false;
     this.disconnect(false);
     this.emit("finish");
@@ -210,8 +192,15 @@ class MediaPlayer extends Media {
   set streamTrack(t) {
     console.log("This should not be done.", t);
   }
-  playStream(stream) {
-    this.emit("buffer");
+  set transport(t) {
+    this.sendTransport = t;
+  }
+  get transport() {
+    return this.sendTransport;
+  }
+  async playStream(stream) {
+    if (this.sendTransport) this.producer = await this.sendTransport.produce({ track: this.track, appData: { type: "audio" } });
+    this.emit("buffer", this.producer);
     this.started = false;
     this.streamFinished = false;
     this.originStream = stream;
@@ -229,51 +218,27 @@ class MediaPlayer extends Media {
     super.playStream(stream); // start playing
   }
   #setupFmpeg() {
+    this.ffmpeg.on("exit", () => {
+      this.socket.send("FINISHPACKET", this.port);
+      this.ffmpeg.kill();
+      this.originStream.destroy();
+      this.currTime = "00:00:00";
+      this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
+        ...this.createFfmpegArgs()
+      ]);
+    });
+    if (!this.logs) return;
     this.ffmpeg.stderr.on("data", (chunk) => {
-      if (this.logs) console.log("err", Buffer.from(chunk).toString());
-      chunk = Buffer.from(chunk).toString(); // parse to string
-      if (chunk.includes("time")) {  // get the current seek pos
-        chunk = chunk.split(" ").map(el => el.trim()); // split by spaces and trim the items; useful for next step
-        chunk = chunk.filter(el => el.startsWith("time")); // find the element indicating the time
-        chunk = chunk.join("").split("=")[1]; // extract the timestamp
-        if (!chunk) return;
-        this.currTime = chunk;
-        if (this.finishTimeout) clearTimeout(this.finishTimeout);
-        this.finishTimeout = setTimeout(() => { // TODO: I REALLY need a better way to do this
-          if (this.streamFinished) {
-            this.socket.send("FINISHPACKET", this.port);
-            // reset ffmpeg to prepare for next stream
-            this.ffmpeg.kill();
-            this.originStream.destroy();
-            this.currTime = "00:00:00";
-            this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
-              ...this.createFfmpegArgs()
-            ]);
-          }
-        }, 2000);
-      } else if (chunk.trim().toLowerCase().includes("duration")) { // get the duration in seconds
-        chunk = chunk.trim().toLowerCase(); // clean it up a bit
-        chunk = chunk.split("\n").map(el => el.trim()).find(el => el.includes("duration")); // find the element that displays the duration
-        chunk = chunk.split(",")[0].trim(); // get the duration part out of the line and clean i up
-        chunk = chunk.split(":").slice(1).join(":").trim(); // remove the "duration: " from the start
-        if (this.logs) console.log("Audio duration: ", MediaPlayer.timestampToSeconds(chunk));
-      }
+      console.log("err", Buffer.from(chunk).toString());
     });
     this.ffmpeg.stdout.on("data", (chunk) => {
-      if (this.logs) console.log("OUT", Buffer.from(chunk().toString()));
+      console.log("OUT", Buffer.from(chunk().toString()));
     });
     this.ffmpeg.stdout.on("end", () => {
-      this.playing = false;
-      if (this.logs) console.log("finished");
-      this.emit("finish");
+      console.log("finished");
     });
     this.ffmpeg.stdout.on("readable", () => {
-      if (this.logs) console.log("readable")
-    });
-    this.ffmpeg.stdin.on("error", (e) => {
-      if (e.code == "EOF" || e.code == "EPIPE") return;
-      console.log("Media; ffmpeg; stdin: ");
-      throw e
+      console.log("readable")
     });
   }
 }

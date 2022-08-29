@@ -43,12 +43,11 @@ class VoiceConnection {
     });
   }
   initTransports(data) {
-    const sendTransport = this.device.createSendTransport({...data.data.sendTransport});
-    this.sendTransport = sendTransport;
-    sendTransport.on("connect", ({ dtlsParameters }, callback) => {
-      this.signaling.connectTransport(sendTransport.id, dtlsParameters).then(callback);
+    this.sendTransport = this.device.createSendTransport({...data.data.sendTransport});
+    this.sendTransport.on("connect", ({ dtlsParameters }, callback) => {
+      this.signaling.connectTransport(this.sendTransport.id, dtlsParameters).then(callback);
     });
-    sendTransport.on("produce", (parameters, callback) => {
+    this.sendTransport.on("produce", (parameters, callback) => {
       this.signaling.startProduce("audio", parameters.rtpParameters).then((cid) => {
         callback({ cid });
       });
@@ -59,10 +58,14 @@ class VoiceConnection {
   }
   async play(media) {
     this.updateState(((!media.isMediaPlayer) ? Revoice.State.UNKNOWN : Revoice.State.BUFFERING));
+
     media.on("finish", () => {
+      this.signaling.stopProduce();
+      this.producer.close();
       this.updateState(Revoice.State.IDLE);
     });
-    media.on("buffer", () => {
+    media.on("buffer", (producer) => {
+      this.producer = producer;
       this.updateState(Revoice.State.BUFFERING);
     });
     media.on("start", () => {
@@ -72,24 +75,29 @@ class VoiceConnection {
       this.updateState(Revoice.State.PAUSED);
     });
     this.media = media;
-    const track = media.track;
-    return await this.sendTransport.produce({ track: track, appData: { type: "audio" } }); // rtpProducer
+    this.media.transport = this.sendTransport;
+    return this.producer;
+  }
+  closeTransport() {
+    return new Promise((res) => {
+      this.sendTransport.once("close", () => {
+        this.sendTransport = undefined;
+        res();
+      });
+      this.sendTransport.close();
+    });
   }
   disconnect() {
-    this.signaling.disconnect();
-    this.sendTransport.close();
-    this.sendTransport = undefined;
-    this.device = Revoice.createDevice();
+    return new Promise((res) => {
+      this.signaling.disconnect();
+      this.closeTransport().then(() => {
+        this.device = Revoice.createDevice();
+        res();
+      });
+    });
   }
-  destroy() {
-    return new Promise(async (res) => {
-      this.disconnect();
-      if (this.media) await this.media.destroy();
-      res();
-    })
-  }
-  leave() {
-    this.disconnect();
+  async leave() {
+    await this.disconnect();
     if (this.media) this.media.disconnect();
     this.emit("leave");
   }

@@ -6,7 +6,7 @@ You still are able to play sound to a voice channel. Other features like channel
 
 **TODO**:
 
-- [X] Play/Pause for the media class (help apreciated ;)) [ Kinda implemented already ]
+- [X] Play/Pause for the media class (help apreciated ;))
 - [ ] Non-voice events like UserJoined and roominfo
 - [ ] Audio reception
 - [ ] Error Handling; Right now, you have to take care of things like stopping the music if you start to play another song while one is playing
@@ -35,10 +35,15 @@ const revoice = new Revoice("the-token-of-your-bot");
 const connection = await revoice.join("the-voice-channel-id");
 const media = new MediaPlayer();
 connection.on("join", () => {
+  connection.play(media); // playing audio does only work after the the bot joined the voice channel
+
+  // IMPORTANT: If you want to hear music,
+  // you have to call connection.play(media)
+  // BEFORE you start playing something in the media player
+
   media.playFile("./assets/some-nice-song.mp3");
   // or something like the following:
   media.playStream(fs.createReadStream("./assets/some-nice-song.mp3"));
-  connection.play(media); // playing audio does only work after the the bot joined the voice channel
 
   // you don't have to store the voice connection, you can retrieve it if you have the id of the voice channel like this:
   const con = revoice.getVoiceConnection("someChannelId");
