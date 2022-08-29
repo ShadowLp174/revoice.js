@@ -149,23 +149,25 @@ class MediaPlayer extends Media {
       this._write();
     }, interval);
   }
-  disconnect(destroy=true) { // this should be called on leave
+  disconnect(destroy=true, f=true) { // this should be called on leave
     if (destroy) this.track = new MediaStreamTrack({ kind: "audio" }); // clean up the current data and streams
     this.paused = false;
-    this.ffmpeg.kill();
+    if (f) this.ffmpeg.kill();
     this.originStream.destroy();
     this.currTime = "00:00:00";
 
-    this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
-      ...this.createFfmpegArgs()
-    ]);
+    if (f) {
+      this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
+        ...this.createFfmpegArgs()
+      ]);
+    }
     this.packets = [];
     this.intervals = [];
     this.opusPackets.once("data", () => {
       this.started = true;
       this.emit("start");
     });
-    this.#setupFmpeg();
+    if (f) this.#setupFmpeg();
   }
   destroy() {
     return Promise.all([
@@ -181,7 +183,7 @@ class MediaPlayer extends Media {
   finished() {
     this.track = new MediaStreamTrack({ kind: "audio" });
     this.playing = false;
-    this.disconnect(false);
+    this.disconnect(false, false);
     this.emit("finish");
   }
   cleanUp() { // TODO: similar to disconnect() but doesn't kill existing processes
@@ -200,9 +202,15 @@ class MediaPlayer extends Media {
     this.emit("start");
     this._write();
   }
-  stop() { // basically the same as process on disconnect
-    this.disconnect(false);
+  stop() {
+    this.#ffmpegFinished();
+    this.finished();
     this.emit("finish");
+  }
+  sleep(ms) {
+    return new Promise((res) => {
+      setTimeout(res, ms);
+    });
   }
   get streamTrack() {
     if (!this.track) this.track = new MediaStreamTrack({ kind: "audio" });
@@ -219,6 +227,7 @@ class MediaPlayer extends Media {
   }
   async playStream(stream) {
     if (this.sendTransport) this.producer = await this.sendTransport.produce({ track: this.track, appData: { type: "audio" } });
+    console.log(this.producer);
     this.emit("buffer", this.producer);
     this.started = false;
     this.streamFinished = false;
@@ -236,15 +245,21 @@ class MediaPlayer extends Media {
 
     super.playStream(stream); // start playing
   }
+  async #ffmpegFinished() {
+    await this.sleep(1000); // prevent bug with no music after 3rd song
+    this.socket.send("FINISHPACKET", this.port);
+    this.originStream.destroy();
+    this.ffmpeg.kill();
+    this.currTime = "00:00:00";
+    this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
+      ...this.createFfmpegArgs()
+    ]);
+  }
   #setupFmpeg() {
-    this.ffmpeg.on("exit", () => {
-      this.socket.send("FINISHPACKET", this.port);
-      this.ffmpeg.kill();
-      this.originStream.destroy();
-      this.currTime = "00:00:00";
-      this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
-        ...this.createFfmpegArgs()
-      ]);
+    this.ffmpeg.on("exit", async (c, s) => {
+      console.log(c, s);
+      if (s == "SIGTERM") return; // killed intentionally
+      this.#ffmpegFinished();
     });
     if (!this.logs) return;
     this.ffmpeg.stderr.on("data", (chunk) => {
@@ -259,6 +274,10 @@ class MediaPlayer extends Media {
     this.ffmpeg.stdout.on("readable", () => {
       console.log("readable")
     });
+    this.ffmpeg.stdout.on("error", (e) => {
+      if (e.code == "EPIPE") return;
+      console.log("Ffmpeg error: ", e);
+    })
   }
 }
 
