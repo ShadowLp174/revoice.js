@@ -71,6 +71,14 @@ class Media {
     if (!stream) throw "You must specify a stream to play!";
     stream.pipe(this.ffmpeg.stdin);
   }
+  destroy() {
+    return new Promise((res, rej) => {
+      this.track = null;
+      this.ffmpeg.kill();
+      this.opusPackets.destroy();
+      this.socket.close(res);
+    });
+  }
 }
 
 class MediaPlayer extends Media {
@@ -158,6 +166,17 @@ class MediaPlayer extends Media {
       this.emit("start");
     });
     this.#setupFmpeg();
+  }
+  destroy() {
+    return Promise.all([
+      super.destroy(),
+      new Promise((res) => {
+        this.packets = [];
+        this.intervals = [];
+        this.originStream.destroy();
+        res();
+      })
+    ]);
   }
   finished() {
     this.track = new MediaStreamTrack({ kind: "audio" });
