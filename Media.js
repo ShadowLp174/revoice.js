@@ -227,7 +227,6 @@ class MediaPlayer extends Media {
   }
   async playStream(stream) {
     if (this.sendTransport) this.producer = await this.sendTransport.produce({ track: this.track, appData: { type: "audio" } });
-    console.log(this.producer);
     this.emit("buffer", this.producer);
     this.started = false;
     this.streamFinished = false;
@@ -257,7 +256,6 @@ class MediaPlayer extends Media {
   }
   #setupFmpeg() {
     this.ffmpeg.on("exit", async (c, s) => {
-      console.log(c, s);
       if (s == "SIGTERM") return; // killed intentionally
       this.#ffmpegFinished();
     });
