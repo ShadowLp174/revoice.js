@@ -34,7 +34,7 @@ class VoiceConnection {
 
   setupSignaling() {
     const signaling = this.signaling;
-    signaling.on("token", console.log);
+    signaling.on("token", () => {});
     signaling.on("authenticate", (data) => {
       this.device.load({ routerRtpCapabilities: data.data.rtpCapabilities });
     });
