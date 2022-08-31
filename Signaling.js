@@ -88,7 +88,7 @@ class Signaling {
       default:
         // events like startProduce or UserJoined; will be implemented later
         this.eventemitter.emit("data", data);
-        console.log("(yet) Unimplemented case: ", data);
+        // console.log("(yet) Unimplemented case: ", data);
       break;
     }
   }

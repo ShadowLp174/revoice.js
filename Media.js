@@ -203,9 +203,25 @@ class MediaPlayer extends Media {
     this._write();
   }
   stop() {
-    this.#ffmpegFinished();
-    this.finished();
-    this.emit("finish");
+    return new Promise(async (res) => {
+      this.ffmpeg.kill();
+      this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
+        ...this.createFfmpegArgs()
+      ]);
+      await this.sleep(1000);
+      this.paused = false;
+      this.originStream.destroy();
+
+      this.packets = [];
+      this.intervals = [];
+      this.opusPackets.once("data", () => {
+        this.started = true;
+        this.emit("start");
+      });
+      this.track = new MediaStreamTrack({ kind: "audio" });
+      this.emit("finish");
+      res();
+    });
   }
   sleep(ms) {
     return new Promise((res) => {
@@ -259,6 +275,10 @@ class MediaPlayer extends Media {
       if (s == "SIGTERM") return; // killed intentionally
       this.#ffmpegFinished();
     });
+    this.ffmpeg.stdin.on("error", (e) => {
+      if (e.code == "EPIPE") return;
+      console.log("Ffmpeg error: ", e);
+    });
     if (!this.logs) return;
     this.ffmpeg.stderr.on("data", (chunk) => {
       console.log("err", Buffer.from(chunk).toString());
@@ -272,10 +292,6 @@ class MediaPlayer extends Media {
     this.ffmpeg.stdout.on("readable", () => {
       console.log("readable")
     });
-    this.ffmpeg.stdout.on("error", (e) => {
-      if (e.code == "EPIPE") return;
-      console.log("Ffmpeg error: ", e);
-    })
   }
 }
 
