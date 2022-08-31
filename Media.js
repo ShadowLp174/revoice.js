@@ -276,6 +276,7 @@ class MediaPlayer extends Media {
       this.#ffmpegFinished();
     });
     this.ffmpeg.stdin.on("error", (e) => {
+      if (e.code == "EPIPE") return;
       console.log("Ffmpeg error: ", e);
     });
     if (!this.logs) return;
