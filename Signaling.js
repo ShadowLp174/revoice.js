@@ -1,5 +1,6 @@
 const EventEmitter = require("events");
 const { WebSocket } = require("ws");
+const User = require("./User.js");
 
 class Signaling {
   constructor(apiClient, channelId) {
@@ -8,6 +9,8 @@ class Signaling {
 
     this.eventemitter = new EventEmitter();
     this.currId = -1;
+
+    this.users = [];
 
     return this;
   }
@@ -62,6 +65,9 @@ class Signaling {
     switch(data.type) {
       case "InitializeTransports":
         this.eventemitter.emit("initTransports", data);
+        this.fetchRoomInfo().then(() => {
+          this.emit("roomfetched");
+        });
       break;
       case "Authenticate":
         // continue in signaling process
@@ -85,12 +91,74 @@ class Signaling {
       case "StopProduce":
         this.eventemitter.emit("StopProduce", data);
       break;
+      case "UserJoined":
+        const user = new User(data.data.id, this.client);
+        user.connected = true;
+        user.connectedTo = this.channelId;
+        user.once("ready", () => {
+          this.addUser(user);
+          this.emit("userjoin", user);
+        });
+      break;
+      case "RoomInfo":
+        this.emit("roominfo", data);
+      break;
+      case "UserLeft":
+        const id = data.data.id;
+        const removed = this.removeUser(id);
+        this.emit("userleave", removed);
       default:
         // events like startProduce or UserJoined; will be implemented later
         this.eventemitter.emit("data", data);
-        console.log("(yet) Unimplemented case: ", data);
+        // console.log("(yet) Unimplemented case: ", data);
       break;
     }
+  }
+  addUser(user) {
+    if (!user) throw "User cannot be null! [Signaling.addUser(user)]";
+    this.users.push(user);
+  }
+  removeUser(id) {
+    const idx = this.users.findIndex(el => el.id == id);
+    if (idx == -1) return;
+    const removed = this.users[idx];
+    this.users.splice(idx, 1);
+    return removed;
+  }
+  isConnected(userId) { // check wether a user is in the voice channel
+    const idx = this.users.findIndex(el => el.id == userId);
+    if (idx == -1) return false;
+    return true;
+  }
+  fetchRoomInfo() {
+    return new Promise((res) => {
+      const request = {
+        id: ++this.currId,
+        type: "RoomInfo"
+      }
+      this.ws.send(JSON.stringify(request));
+      this.on("roominfo", (data) => {
+        const users = data.data.users;
+        if ((Object.keys(users).length - 1) == 0) return res();
+        let promises = [];
+        for (let userId in users) {
+          let user = new User(userId, this.client);
+          user.connected = true;
+          user.connectedTo = this.channelId;
+          promises.push(this.eventToPromise(user, "ready"));
+          user.muted = 1 - users[userId].audio;
+          this.addUser(user);
+        }
+        Promise.all(promises).then(res);
+      });
+    });
+  }
+  eventToPromise(emitter, event) {
+    return new Promise(res => {
+      emitter.once(event, (data) => {
+        res(data);
+      });
+    });
   }
   connectTransport(id, params) {
     return new Promise((res, rej) => {

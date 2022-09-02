@@ -13,6 +13,7 @@ class VoiceConnection {
     this.setupSignaling();
     this.signaling.connect(channelId);
 
+    //this.uid = Revoice.uid();
     this.media = null;
 
     this.eventemitter = new EventEmitter();
@@ -32,6 +33,13 @@ class VoiceConnection {
     this.emit("state", state);
   }
 
+  getUsers() {
+    return this.signaling.users;
+  }
+  isConnected(userId) {
+    return this.signaling.isConnected(userId);
+  }
+
   setupSignaling() {
     const signaling = this.signaling;
     signaling.on("token", () => {});
@@ -40,6 +48,24 @@ class VoiceConnection {
     });
     signaling.on("initTransports", (data) => {
       this.initTransports(data);
+    });
+
+    // user events
+    signaling.on("roomfetched", () => {
+      signaling.users.forEach((user) => {
+        this.voice.users.set(user.id, user);
+      });
+    });
+    signaling.on("userjoin", (user) => {
+      this.voice.users.set(user.id, user);
+      this.emit("userjoin", user);
+    });
+    signaling.on("userleave", (user) => {
+      const old = this.voice.users.get(user.id);
+      old.connected = false;
+      old.connectedTo = null;
+      this.voice.users.set(user.id, old);
+      this.emit("userleave", user);
     });
   }
   initTransports(data) {
@@ -156,6 +182,8 @@ class Revoice {
     this.connected = []; // list of channels the bot is connected to
     this.connections = new Map();
 
+    this.users = new Map();
+
     this.state = Revoice.State.OFFLINE;
 
     return this;
@@ -172,6 +200,21 @@ class Revoice {
   }
   emit(event, data) {
     return this.eventemitter.emit(event, data);
+  }
+  static uid() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+
+  getUser(id) {
+    if (!this.users.has(id)) return false; // no data about the user in cache
+    const user = this.users.get(id);
+    if (!user) return false;
+    if (!user.connected) return { user };
+    const connection = this.connections.get(user.connectedTo);
+    return { user, connection };
+  }
+  knowsUser(id) { // might not be up-to-date because of leaving
+    return this.users.has(id);
   }
 
   join(channelId) {
