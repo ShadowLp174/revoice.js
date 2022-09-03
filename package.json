@@ -18,7 +18,8 @@
   "files": [
     "Media.js",
     "Revoice.js",
-    "Signaling.js"
+    "Signaling.js",
+    "User.js"
   ],
   "repository": {
     "type": "git",
