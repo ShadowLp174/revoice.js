@@ -53,6 +53,7 @@ class Signaling {
     });
     this.ws.on("close", (e) => {
       if (e !== 1000) console.log("WebSocket Closed: ", e);
+      // TODO: Reconnect
     });
     this.ws.on("error", (e) => {
       console.log("Signaling error: ", e);
@@ -142,7 +143,7 @@ class Signaling {
       this.ws.send(JSON.stringify(request));
       this.on("roominfo", (data) => {
         const users = data.data.users;
-        if ((Object.keys(users).length - 1) == 0) return res();
+        //if ((Object.keys(users).length - 1) == 0) return res();
         let promises = [];
         for (let userId in users) {
           let user = new User(userId, this.client);

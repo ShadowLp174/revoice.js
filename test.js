@@ -43,11 +43,10 @@ var currPlayerPort = -1;
 client.on("message", (message) => {
   if (message.content.toLowerCase().startsWith(prefix + commands[0])) {
     const args = message.content.split(" ");
-    voice.join(args[1]).then(connection => {
-      console.log(connection);
+    voice.join(args[1], 5).then(connection => {
       connection.on("state", (s) => {
         console.log(s);
-      })
+      });
     }).catch(e => {
       console.log(e);
     });

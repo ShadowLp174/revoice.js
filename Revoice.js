@@ -77,18 +77,18 @@ class VoiceConnection {
     });
   }
   initLeave() {
+    const signaling = this.signaling;
     if (this.leaving) {
       clearTimeout(this.leaving);
       this.leaving = null;
     }
-    if (signaling.roomEmpty && this.leaveTimeout) {
-      this.leaving = setTimeout(() => {
-        this.leave();
-        this.once("leave", () => {
-          this.destroy();
-        });
-      }, this.leaveTimeout * 1000);
-    }
+    if (!(signaling.roomEmpty && this.leaveTimeout)) return;
+    this.leaving = setTimeout(() => {
+      this.leave();
+      this.once("leave", () => {
+        this.destroy();
+      });
+    }, this.leaveTimeout * 1000);
   }
   initTransports(data) {
     this.sendTransport = this.device.createSendTransport({...data.data.sendTransport});
