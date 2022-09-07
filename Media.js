@@ -186,11 +186,6 @@ class MediaPlayer extends Media {
     this.disconnect(false, false);
     this.emit("finish");
   }
-  cleanUp() { // TODO: similar to disconnect() but doesn't kill existing processes
-    this.paused = false;
-    this.currBuffer = null;
-    this.currTime = "00:00:00";
-  }
   pause() {
     if (this.paused) return;
     this.paused = true;

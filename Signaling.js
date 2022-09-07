@@ -11,6 +11,7 @@ class Signaling {
     this.currId = -1;
 
     this.users = [];
+    this.roomEmpty = null;
 
     return this;
   }
@@ -66,6 +67,7 @@ class Signaling {
       case "InitializeTransports":
         this.eventemitter.emit("initTransports", data);
         this.fetchRoomInfo().then(() => {
+          this.roomEmpty = (this.users.length == 1);
           this.emit("roomfetched");
         });
       break;
@@ -106,6 +108,7 @@ class Signaling {
       case "UserLeft":
         const id = data.data.id;
         const removed = this.removeUser(id);
+        this.roomEmpty = (this.users.length == 1);
         this.emit("userleave", removed);
       default:
         // events like startProduce or UserJoined; will be implemented later

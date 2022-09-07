@@ -13,7 +13,9 @@ class VoiceConnection {
     this.setupSignaling();
     this.signaling.connect(channelId);
 
-    //this.uid = Revoice.uid();
+    this.leaveTimeout = opts.leaveOnEmpty;
+    this.leaving; // the actual timeout cancellable
+
     this.media = null;
 
     this.eventemitter = new EventEmitter();
@@ -52,12 +54,17 @@ class VoiceConnection {
 
     // user events
     signaling.on("roomfetched", () => {
+      this.initLeave();
       signaling.users.forEach((user) => {
         this.voice.users.set(user.id, user);
       });
     });
     signaling.on("userjoin", (user) => {
       this.voice.users.set(user.id, user);
+      if (this.leaving) {
+        clearTimeout(this.leaving);
+        this.leaving = null;
+      }
       this.emit("userjoin", user);
     });
     signaling.on("userleave", (user) => {
@@ -65,8 +72,23 @@ class VoiceConnection {
       old.connected = false;
       old.connectedTo = null;
       this.voice.users.set(user.id, old);
+      this.initLeave();
       this.emit("userleave", user);
     });
+  }
+  initLeave() {
+    if (this.leaving) {
+      clearTimeout(this.leaving);
+      this.leaving = null;
+    }
+    if (signaling.roomEmpty && this.leaveTimeout) {
+      this.leaving = setTimeout(() => {
+        this.leave();
+        this.once("leave", () => {
+          this.destroy();
+        });
+      }, this.leaveTimeout * 1000);
+    }
   }
   initTransports(data) {
     this.sendTransport = this.device.createSendTransport({...data.data.sendTransport});
@@ -217,7 +239,7 @@ class Revoice {
     return this.users.has(id);
   }
 
-  join(channelId) {
+  join(channelId, leaveIfEmpty=false) { // leaveIfEmpty == amount of seconds the bot will wait before leaving if the room is empty
     return new Promise((res, rej) => {
       this.api.get("/channels/" + channelId).then(data => {
         if (data.channel_type != "VoiceChannel") return rej(Revoice.Error.NOT_A_VC);
@@ -230,7 +252,8 @@ class Revoice {
 
         const connection = new VoiceConnection(channelId, this, {
           signaling: signaling,
-          device: device
+          device: device,
+          leaveOnEmpty: leaveIfEmpty
         });
         connection.updateState(Revoice.State.JOINING);
         this.connections.set(channelId, connection);
