@@ -149,7 +149,7 @@ class VoiceConnection {
       this.disconnect();
       if (this.media) await this.media.destroy();
       res();
-    })
+    });
   }
   async leave() {
     await this.disconnect();

@@ -3,12 +3,14 @@ const { WebSocket } = require("ws");
 const User = require("./User.js");
 
 class Signaling {
-  constructor(apiClient, channelId) {
+  constructor(apiClient, channelId, reconnectTimeout=3000) {
     this.client = apiClient;
     this.channelId = channelId;
+    this.reconnectTimeout = reconnectTimeout;
 
     this.eventemitter = new EventEmitter();
     this.currId = -1;
+    this.reconnecting = false;
 
     this.users = [];
     this.roomEmpty = null;
@@ -40,6 +42,10 @@ class Signaling {
     this.ws.close(1000);
     this.currId = -1;
   }
+  reconnect() {
+    this.reconnecting = true;
+    this.connect(this.channelId);
+  }
 
   initWebSocket(data) {
     this.ws = new WebSocket("wss://vortex.revolt.chat"); // might need to whitelist this in your antivirus
@@ -54,6 +60,9 @@ class Signaling {
     this.ws.on("close", (e) => {
       if (e !== 1000) console.log("WebSocket Closed: ", e);
       // TODO: Reconnect
+      setTimeout(() => {
+        this.reconnect();
+      }, this.reconnectTimeout);
     });
     this.ws.on("error", (e) => {
       console.log("Signaling error: ", e);
@@ -66,7 +75,7 @@ class Signaling {
   processWS(data) { // data == parsed websocket message
     switch(data.type) {
       case "InitializeTransports":
-        this.eventemitter.emit("initTransports", data);
+        if (!this.reconnecting)  this.eventemitter.emit("initTransports", data);
         this.fetchRoomInfo().then(() => {
           this.roomEmpty = (this.users.length == 1);
           this.emit("roomfetched");
@@ -74,7 +83,7 @@ class Signaling {
       break;
       case "Authenticate":
         // continue in signaling process
-        this.eventemitter.emit("authenticate", data);
+        if (!this.reconnecting) this.eventemitter.emit("authenticate", data);
         const request = {
           id: ++this.currId,
           type: "InitializeTransports",
@@ -86,7 +95,7 @@ class Signaling {
         this.ws.send(JSON.stringify(request));
       break;
       case "ConnectTransport":
-        this.eventemitter.emit("ConnectTransport", data);
+        if (!this.reconnecting)  this.eventemitter.emit("ConnectTransport", data);
       break;
       case "StartProduce":
         this.eventemitter.emit("StartProduce", data);
