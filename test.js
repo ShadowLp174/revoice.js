@@ -77,20 +77,28 @@ client.on("message", (message) => {
   } else if (message.content.toLowerCase().startsWith(prefix + commands[2])) {
     message.reply("Pong");
   } else if (message.content.toLowerCase().startsWith(prefix + commands[3])) {
-    const args = message.content.split(" ");
-    let m = media.get(args[1]);
+    const user = voice.getUser(message.author_id).user;
+    if (!user) return message.reply("It doesn't seem like we're in a voice channel together...");
+    const cid = user.connectedTo;
+    let m = media.get(cid);
     m.pause();
   } else if (message.content.toLowerCase().startsWith(prefix + commands[4])) {
-    const args = message.content.split(" ");
-    let m = media.get(args[1]);
+    const user = voice.getUser(message.author_id).user;
+    if (!user) return message.reply("It doesn't seem like we're in a voice channel together...");
+    const cid = user.connectedTo;
+    let m = media.get(cid);
     m.resume();
   } else if (message.content.toLowerCase().startsWith(prefix + commands[5])) {
-    const args = message.content.split(" ");
-    let connection = voice.getVoiceConnection(args[1]);
+    const user = voice.getUser(message.author_id).user;
+    if (!user) return message.reply("It doesn't seem like we're in a voice channel together...");
+    const cid = user.connectedTo;
+    let connection = voice.getVoiceConnection(cid);
     connection.leave();
   } else if (message.content.toLowerCase().startsWith(prefix + commands[6])) {
-    const args = message.content.split(" ");
-    let m = media.get(args[1]);
+    const user = voice.getUser(message.author_id).user;
+    if (!user) return message.reply("It doesn't seem like we're in a voice channel together...");
+    const cid = user.connectedTo;
+    let m = media.get(cid);
     m.stop();
   }
 });

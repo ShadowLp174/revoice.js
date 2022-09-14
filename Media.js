@@ -183,6 +183,7 @@ class MediaPlayer extends Media {
   finished() {
     this.track = new MediaStreamTrack({ kind: "audio" });
     this.playing = false;
+    this.paused = false;
     this.disconnect(false, false);
     this.emit("finish");
   }
@@ -193,7 +194,6 @@ class MediaPlayer extends Media {
   }
   resume() {
     if (!this.paused) return;
-    this.paused = false;
     this.emit("start");
     this._write();
   }
