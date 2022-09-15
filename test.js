@@ -55,15 +55,11 @@ client.on("message", (message) => {
     const user = voice.getUser(message.author_id).user;
     if (!user) return message.reply("It doesn't seem like we're in a voice channel together...");
     const cid = user.connectedTo;
-    let m = media.get(cid);
-    if (!m) {
-      m = new MediaPlayer(false, 5030 + (++currPlayerPort));
-      media.set(cid, m);
-    }
     const connection = voice.getVoiceConnection(cid);
     if (!connection.media) { // should be called before playing
-      connection.play(m);
+      connection.play(new MediaPlayer(false, 5030 + (++currPlayerPort)));
     }
+    m = connection.media;
     m.playStream(ytdl(args[1], {
       filter: 'audioonly',
       quality: 'highestaudio',
@@ -80,13 +76,13 @@ client.on("message", (message) => {
     const user = voice.getUser(message.author_id).user;
     if (!user) return message.reply("It doesn't seem like we're in a voice channel together...");
     const cid = user.connectedTo;
-    let m = media.get(cid);
+    let m = voice.getVoiceConnection(cid).media;
     m.pause();
   } else if (message.content.toLowerCase().startsWith(prefix + commands[4])) {
     const user = voice.getUser(message.author_id).user;
     if (!user) return message.reply("It doesn't seem like we're in a voice channel together...");
     const cid = user.connectedTo;
-    let m = media.get(cid);
+    let m = voice.getVoiceConnection(cid).media;
     m.resume();
   } else if (message.content.toLowerCase().startsWith(prefix + commands[5])) {
     const user = voice.getUser(message.author_id).user;
@@ -98,7 +94,7 @@ client.on("message", (message) => {
     const user = voice.getUser(message.author_id).user;
     if (!user) return message.reply("It doesn't seem like we're in a voice channel together...");
     const cid = user.connectedTo;
-    let m = media.get(cid);
+    let m = voice.getVoiceConnection(cid).media;
     m.stop();
   }
 });

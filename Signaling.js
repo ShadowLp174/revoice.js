@@ -58,7 +58,8 @@ class Signaling {
       this.ws.send(msg);
     });
     this.ws.on("close", (e) => {
-      if (e !== 1000) console.log("WebSocket Closed: ", e);
+      if (e === 1000) return; // don't reconnect when websocket is closed intentionally
+      console.log("WebSocket Closed: ", e);
       // TODO: Reconnect
       setTimeout(() => {
         this.reconnect();
