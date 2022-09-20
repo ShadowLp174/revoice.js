@@ -124,6 +124,9 @@ class VoiceConnection {
     });
     this.media = media;
     this.media.transport = this.sendTransport;
+    this.sendTransport.on("close", () => {
+      console.log("closed");
+    });
     return this.producer;
   }
   closeTransport() {
@@ -152,9 +155,11 @@ class VoiceConnection {
     });
   }
   async leave() {
+    console.log("leave");
     await this.disconnect();
     if (this.media) this.media.disconnect();
     this.emit("leave");
+    this.updateState(Revoice.State.OFFLINE);
   }
 }
 
