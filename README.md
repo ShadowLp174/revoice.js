@@ -4,10 +4,14 @@ This package is still in developement and lacks many features.
 
 You still are able to play sound to a voice channel. Other features like channel info will follow.
 
+## **Developement paused because of vortex rewrite**
+
+Vortex are the voice servers behind revolt and they are currently being rewritten so adding new features now doesn't make any sense. User stuff, play/pause, audio works but without proper docs. I'm sorry about the docs but they will be updated in the upcoming rewrite of the library after the vortex update.
+
 **TODO**:
 
 - [X] Play/Pause for the media class (help apreciated ;))
-- [ ] Non-voice events like UserJoined and roominfo
+- [X] Non-voice events like UserJoined and roominfo
 - [ ] Audio reception
 - [ ] Error Handling; Right now, you have to take care of things like stopping the music if you start to play another song while one is playing
 
