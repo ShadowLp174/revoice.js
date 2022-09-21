@@ -152,6 +152,7 @@ class VoiceConnection {
     });
   }
   async leave() {
+    this.updateState(Revoice.State.OFFLINE);
     await this.disconnect();
     if (this.media) this.media.disconnect();
     this.emit("leave");
