@@ -84,10 +84,11 @@ class VoiceConnection {
     }
     if (!(signaling.roomEmpty && this.leaveTimeout)) return;
     this.leaving = setTimeout(() => {
-      this.leave();
       this.once("leave", () => {
         this.destroy();
+        this.emit("autoleave");
       });
+      this.leave();
     }, this.leaveTimeout * 1000);
   }
   initTransports(data) {
@@ -124,9 +125,6 @@ class VoiceConnection {
     });
     this.media = media;
     this.media.transport = this.sendTransport;
-    this.sendTransport.on("close", () => {
-      console.log("closed");
-    });
     return this.producer;
   }
   closeTransport() {
@@ -142,9 +140,10 @@ class VoiceConnection {
     return new Promise((res) => {
       this.signaling.disconnect();
       this.closeTransport().then(() => {
-        this.device = Revoice.createDevice();
-        res();
+        // just a temporary fix till vortex rewrite
       });
+      this.device = Revoice.createDevice();
+      res();
     });
   }
   destroy() {
@@ -155,11 +154,10 @@ class VoiceConnection {
     });
   }
   async leave() {
-    console.log("leave");
+    this.updateState(Revoice.State.OFFLINE);
     await this.disconnect();
     if (this.media) this.media.disconnect();
     this.emit("leave");
-    this.updateState(Revoice.State.OFFLINE);
   }
 }
 
@@ -259,6 +257,9 @@ class Revoice {
           signaling: signaling,
           device: device,
           leaveOnEmpty: leaveIfEmpty
+        });
+        connection.on("autoleave", () => {
+          this.connections.delete(channelId);
         });
         connection.updateState(Revoice.State.JOINING);
         this.connections.set(channelId, connection);
