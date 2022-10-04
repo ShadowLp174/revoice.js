@@ -9,15 +9,9 @@ class Media {
     this.socket = require("dgram").createSocket("udp4");
     this.socket.bind(port);
 
-    const _this = this;
-    this.opusPackets = new require("stream").Readable({
-      read: async function() {
-        this.push(await _this.getRtpMessage());
-      }
-    });
-    this.opusPackets.on("data", (packet) => {
-      packetHandler(packet); // defined in the constructor params
-    });
+    this.socket.on("message", (packet) => {
+      packetHandler(packet); // defined in constructor params
+    })
 
     this.port = port;
     this.logs = logs;
@@ -44,14 +38,6 @@ class Media {
   once(event, cb) {
     return "Unimplemented";
   }
-
-  getRtpMessage() {
-    return new Promise((res) => {
-      this.socket.once("message", (msg) => {
-        res(msg);
-      });
-    });
-  }
   createFfmpegArgs(start="00:00:00") {
     return ["-re", "-i", "-", "-ss", start, "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + this.port]
   }
@@ -75,7 +61,6 @@ class Media {
     return new Promise((res, rej) => {
       this.track = null;
       this.ffmpeg.kill();
-      this.opusPackets.destroy();
       this.socket.close(res);
     });
   }
@@ -84,6 +69,10 @@ class Media {
 class MediaPlayer extends Media {
   constructor(logs=false, port=5030) {
     super(logs, port, (packet) => {
+      if (!this.started) {
+        this.started = true;
+        this.emit("start");
+      }
       if (this.paused) {
         return this._save(packet);
       }
@@ -163,10 +152,7 @@ class MediaPlayer extends Media {
     }
     this.packets = [];
     this.intervals = [];
-    this.opusPackets.once("data", () => {
-      this.started = true;
-      this.emit("start");
-    });
+    this.started = false
     if (f) this.#setupFmpeg();
   }
   destroy() {
@@ -209,10 +195,7 @@ class MediaPlayer extends Media {
 
       this.packets = [];
       this.intervals = [];
-      this.opusPackets.once("data", () => {
-        this.started = true;
-        this.emit("start");
-      });
+      this.started = false;
       this.track = new MediaStreamTrack({ kind: "audio" });
       this.emit("finish");
       res();
@@ -244,10 +227,6 @@ class MediaPlayer extends Media {
     this.originStream = stream;
     this.originStream.on("end", () => {
       this.streamFinished = true;
-    });
-    this.opusPackets.once("data", () => {
-      this.started = true;
-      this.emit("start");
     });
 
     // ffmpeg stuff
