@@ -31,6 +31,8 @@ Media has to be created using the MediaPlayer class. You can stream both node st
 
 Example:
 
+If you want to see a working music bot using revoice, check out [Remix](https://github.com/remix-bot/revolt)!
+
 ```JavaScript
 const { Revoice, MediaPlayer } = require("revoice.js");
 const fs = require("fs");
