@@ -3,7 +3,21 @@ const EventEmitter = require("events");
 const fs = require("fs");
 const ffmpeg = require("ffmpeg-static");
 
+
+/**
+ * @class
+ * @classdesc Basic class to process audio streams
+ */
 class Media {
+  /**
+   * @description Init the media object
+   *
+   * @param {boolean} logs=false Wether or not to output logs
+   * @param {number} port=5030 A ffmpeg rtp port that this instance will be using.
+   * @param {PacketHandler} packetHandler=(packet)=>{this.track.writeRtp(packet);} The function that determines how audio packets are handled.
+   *
+   * @return {Media} The new Media object instance
+   */
   constructor(logs=false, port=5030, packetHandler=(packet)=>{this.track.writeRtp(packet);}) {
     this.track = new MediaStreamTrack({ kind: "audio" });
     this.socket = require("dgram").createSocket("udp4");
@@ -38,27 +52,61 @@ class Media {
   once(event, cb) {
     return "Unimplemented";
   }
+  /**
+   * Returns an array of arguments that can be passed to ffmpeg
+   *
+   * @param  {string} start="00:00:00" The position in the audio to start the conversion.
+   * @return {Array<string>}           The arguments.
+   */
   createFfmpegArgs(start="00:00:00") {
     return ["-re", "-i", "-", "-ss", start, "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + this.port]
   }
+  /**
+   * @description Returns the current mediasoup media track
+   *
+   * @return {MediaStreamTrack}  The mediasoup MediaStreamTrack
+   */
   getMediaTrack() {
     return this.track;
   }
+  /**
+   * Load and process an audio file
+   *
+   * @param  {string} path The file path of the file
+   * @return {void}
+   */
   playFile(path) {
     if (!path) throw "You must specify a file to play!";
     const stream = fs.createReadStream(path);
     stream.pipe(this.ffmpeg.stdin);
   }
+  /**
+   * Writes a chunk of data into the ffmpeg process.
+   *
+   * @param  {object} chunk The datachunk to write.
+   * @return {void}
+   */
   writeStreamChunk(chunk) {
     if (!chunk) throw "You must pass a chunk to be written into the stream";
     this.ffmpeg.stdin.write(chunk);
   }
+  /**
+   * Pipe a ReadStream into the ffmpeg process.
+   *
+   * @param  {Stream} stream The stream to pipe.
+   * @return {void}
+   */
   playStream(stream) {
     if (!stream) throw "You must specify a stream to play!";
     stream.pipe(this.ffmpeg.stdin);
   }
+  /**
+   * Kill the ffmpeg instance and close the socket.
+   *
+   * @return {Promise<void>} A promise resolving when the udp4 socket closed.
+   */
   destroy() {
-    return new Promise((res, rej) => {
+    return new Promise((res, _rej) => {
       this.track = null;
       this.ffmpeg.kill();
       this.socket.close(res);
@@ -66,7 +114,19 @@ class Media {
   }
 }
 
+/**
+ * @class
+ * @augments Media
+ * @description An advanced version of the Media class. It also includes media controls like pausing.
+ */
 class MediaPlayer extends Media {
+  /**
+   * @description Initiates the MediaPlayer instance.
+   *
+   * @param  {boolean} logs=false Wether or not to print logs to the console or not.
+   * @param  {number} port=5030  The port this instance should use.
+   * @return {MediaPlayer}            The new instance.
+   */
   constructor(logs=false, port=5030) {
     super(logs, port, (packet) => {
       if (!this.started) {
@@ -117,6 +177,12 @@ class MediaPlayer extends Media {
     return (hours * 60 * 60) + (minutes * 60) + currSeconds; // convert everything to seconds
   }
 
+  /**
+   * @description Saves a data packet temporarily
+   *
+   * @param  {object} packet The packet to store.
+   * @return {void}
+   */
   _save(packet) {
     let time = Date.now();
     if (!this.lastPacket) this.lastPacket = time;
@@ -124,6 +190,11 @@ class MediaPlayer extends Media {
     this.lastPacket = time + 2;
     this.packets.push(packet);
   }
+  /**
+   * @description Start writing the data from the temporal storage to the media track. Recursive, will stop when the storage is empty.
+   *
+   * @return {void}
+   */
   _write() {
     if (this.packets.length == 0) { this.paused = false; return this.writing = false;}
     this.writing = true;
@@ -138,6 +209,13 @@ class MediaPlayer extends Media {
       this._write();
     }, interval);
   }
+  /**
+   * @description Cleans up this instance. Should be called when the bot is leaving.
+   *
+   * @param  {boolean} destroy=true Wether or not to replace the mediatrack
+   * @param  {boolean} f=true       Wether or not to respawn the ffmpeg instance.
+   * @return {void}
+   */
   disconnect(destroy=true, f=true) { // this should be called on leave
     if (destroy) this.track = new MediaStreamTrack({ kind: "audio" }); // clean up the current data and streams
     this.paused = false;
@@ -155,6 +233,11 @@ class MediaPlayer extends Media {
     this.started = false
     if (f) this.#setupFmpeg();
   }
+  /**
+   * @description Destroys all streams and frees the port.
+   *
+   * @return {Promise<void>} A promise that resolves when everything is finished.
+   */
   destroy() {
     return Promise.all([
       super.destroy(),
@@ -166,6 +249,11 @@ class MediaPlayer extends Media {
       })
     ]);
   }
+  /**
+   * @description Function that is called when the ffmpeg stream finishes.
+   *
+   * @return {void}
+   */
   finished() {
     this.track = new MediaStreamTrack({ kind: "audio" });
     this.playing = false;
@@ -173,16 +261,31 @@ class MediaPlayer extends Media {
     this.disconnect(false, false);
     this.emit("finish");
   }
+  /**
+   * @description Pause the current playback
+   *
+   * @return {void}
+   */
   pause() {
     if (this.paused) return;
     this.paused = true;
     this.emit("pause");
   }
+  /**
+   * @description Resume the current playback.
+   *
+   * @return {void}
+   */
   resume() {
     if (!this.paused) return;
     this.emit("start");
     this._write();
   }
+  /**
+   * @description Stop the playback.
+   *
+   * @return {Promise<void>} Resolves when all is cleaned up.
+   */
   stop() {
     return new Promise(async (res) => {
       this.ffmpeg.kill();
@@ -208,7 +311,7 @@ class MediaPlayer extends Media {
   }
   get streamTrack() {
     if (!this.track) this.track = new MediaStreamTrack({ kind: "audio" });
-    this.getMediaTrack();
+    return this.getMediaTrack();
   }
   set streamTrack(t) {
     console.log("This should not be done.", t);
@@ -219,6 +322,13 @@ class MediaPlayer extends Media {
   get transport() {
     return this.sendTransport;
   }
+
+  /**
+   * @description Play an audio read stream to the media track.
+   *
+   * @param  {ReadableStream} stream The stream to play.
+   * @return {void}
+   */
   async playStream(stream) {
     if (this.sendTransport) this.producer = await this.sendTransport.produce({ track: this.track, appData: { type: "audio" } });
     this.emit("buffer", this.producer);

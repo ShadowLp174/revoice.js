@@ -4,7 +4,8 @@
   "description": "A voice module for Revolt",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified. For tests see experimental branch.\" && exit 1"
+    "test": "echo \"Error: no test specified. For tests see experimental branch.\" && exit 1",
+    "docs": "jsdoc -c jsdoc.json"
   },
   "keywords": [
     "voice",
@@ -33,6 +34,7 @@
   "author": "ShadowLp174",
   "license": "MIT",
   "dependencies": {
+    "better-docs": "^2.7.2",
     "ffmpeg-static": "^5.0.2",
     "msc-node": "^0.0.10",
     "revolt-api": "^0.5.5",

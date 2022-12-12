@@ -1,0 +1,23 @@
+{
+  "opts": {
+    "template": "node_modules/better-docs",
+    "destination": "./docs",
+    "readme": "README.md"
+  },
+  "source": {
+    "include": ["Media.js", "Revoice.js", "Signaling.js", "User.js"],
+    "includePattern": ".+\\.js(doc|x)?$",
+    "excludePattern": "(^|\\/|\\\\)_"
+  },
+  "sourceType": "module",
+  "tags": {
+    "allowUnknownTags": true,
+    "dictionaries": ["jsdoc","closure"]
+  },
+  "templates": {
+    "cleverLinks": false,
+    "monospaceLinks": false
+  },
+  "plugins": ["plugins/markdown"],
+  "recurseDepth": 10
+}

@@ -3,7 +3,7 @@ const Signaling = require("./Signaling.js");
 const EventEmitter = require("events");
 const { Device, useSdesMid, RTCRtpCodecParameters } = require("msc-node");
 
-class VoiceConnection {
+class VoiceConnection extends EventEmitter {
   constructor(channelId, voice, opts) {
     this.voice = voice;
     this.channelId = channelId;
@@ -17,17 +17,6 @@ class VoiceConnection {
     this.leaving; // the actual timeout cancellable
 
     this.media = null;
-
-    this.eventemitter = new EventEmitter();
-  }
-  on(event, cb) {
-    return this.eventemitter.on(event, cb);
-  }
-  once(event, cb) {
-    return this.eventemitter.once(event, cb);
-  }
-  emit(event, data) {
-    return this.eventemitter.emit(event, data);
   }
 
   updateState(state) {
@@ -161,7 +150,7 @@ class VoiceConnection {
   }
 }
 
-class Revoice {
+class Revoice extends EventEmitter {
   static createDevice() {
     return new Device({
       headerExtensions: {
@@ -200,8 +189,6 @@ class Revoice {
     this.signals = new Map();
     this.signaling = new Signaling(this.api);
 
-    this.eventemitter = new EventEmitter();
-
     this.transports = new Map();
     this.devices = new Map(); // list of devices by server id
     this.connected = []; // list of channels the bot is connected to
@@ -216,15 +203,6 @@ class Revoice {
   updateState(state) {
     this.state = state;
     this.emit("state", state);
-  }
-  on(event, cb) {
-    return this.eventemitter.on(event, cb);
-  }
-  once(event, cb) {
-    return this.eventemitter.once(event, cb);
-  }
-  emit(event, data) {
-    return this.eventemitter.emit(event, data);
   }
   static uid() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
