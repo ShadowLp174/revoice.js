@@ -13,7 +13,9 @@ class VoiceConnection {
     this.setupSignaling();
     this.signaling.connect(channelId);
 
-    //this.uid = Revoice.uid();
+    this.leaveTimeout = opts.leaveOnEmpty;
+    this.leaving; // the actual timeout cancellable
+
     this.media = null;
 
     this.eventemitter = new EventEmitter();
@@ -52,12 +54,17 @@ class VoiceConnection {
 
     // user events
     signaling.on("roomfetched", () => {
+      this.initLeave();
       signaling.users.forEach((user) => {
         this.voice.users.set(user.id, user);
       });
     });
     signaling.on("userjoin", (user) => {
       this.voice.users.set(user.id, user);
+      if (this.leaving) {
+        clearTimeout(this.leaving);
+        this.leaving = null;
+      }
       this.emit("userjoin", user);
     });
     signaling.on("userleave", (user) => {
@@ -65,8 +72,24 @@ class VoiceConnection {
       old.connected = false;
       old.connectedTo = null;
       this.voice.users.set(user.id, old);
+      this.initLeave();
       this.emit("userleave", user);
     });
+  }
+  initLeave() {
+    const signaling = this.signaling;
+    if (this.leaving) {
+      clearTimeout(this.leaving);
+      this.leaving = null;
+    }
+    if (!(signaling.roomEmpty && this.leaveTimeout)) return;
+    this.leaving = setTimeout(() => {
+      this.once("leave", () => {
+        this.destroy();
+        this.emit("autoleave");
+      });
+      this.leave();
+    }, this.leaveTimeout * 1000);
   }
   initTransports(data) {
     this.sendTransport = this.device.createSendTransport({...data.data.sendTransport});
@@ -117,9 +140,10 @@ class VoiceConnection {
     return new Promise((res) => {
       this.signaling.disconnect();
       this.closeTransport().then(() => {
-        this.device = Revoice.createDevice();
-        res();
+        // just a temporary fix till vortex rewrite
       });
+      this.device = Revoice.createDevice();
+      res();
     });
   }
   destroy() {
@@ -127,9 +151,10 @@ class VoiceConnection {
       this.disconnect();
       if (this.media) await this.media.destroy();
       res();
-    })
+    });
   }
   async leave() {
+    this.updateState(Revoice.State.OFFLINE);
     await this.disconnect();
     if (this.media) this.media.disconnect();
     this.emit("leave");
@@ -217,7 +242,7 @@ class Revoice {
     return this.users.has(id);
   }
 
-  join(channelId) {
+  join(channelId, leaveIfEmpty=false) { // leaveIfEmpty == amount of seconds the bot will wait before leaving if the room is empty
     return new Promise((res, rej) => {
       this.api.get("/channels/" + channelId).then(data => {
         if (data.channel_type != "VoiceChannel") return rej(Revoice.Error.NOT_A_VC);
@@ -230,7 +255,11 @@ class Revoice {
 
         const connection = new VoiceConnection(channelId, this, {
           signaling: signaling,
-          device: device
+          device: device,
+          leaveOnEmpty: leaveIfEmpty
+        });
+        connection.on("autoleave", () => {
+          this.connections.delete(channelId);
         });
         connection.updateState(Revoice.State.JOINING);
         this.connections.set(channelId, connection);
