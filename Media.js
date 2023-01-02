@@ -2,6 +2,7 @@ const { MediaStreamTrack } = require("msc-node");
 const EventEmitter = require("events");
 const fs = require("fs");
 const ffmpeg = require("ffmpeg-static");
+const prism = require("prism-media");
 
 class Media {
   constructor(logs=false, port=5030, packetHandler=(packet)=>{this.track.writeRtp(packet);}) {
@@ -87,8 +88,9 @@ class MediaPlayer extends Media {
       if (this.paused) {
         return this._save(packet);
       }
+
       if (packet == "FINISHPACKET") return this.finished();
-      this.track.writeRtp(packet);
+      this.opusDecoder.write(packet);
     });
     this.isMediaPlayer = true;
 
@@ -101,6 +103,15 @@ class MediaPlayer extends Media {
     this.intervals = [];
     this.lastPacket = null;
     this.paused = false;
+
+    this.volume = new prism.VolumeTransformer({ type: 's16le', volume: 1 });//new VolumeTransformer();
+    this.opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
+    this.opusDecoder.pipe(this.volume);
+    this.opusEncoder = new prism.opus.Encoder({ frameSize: 960, channels: 2, rate: 48000 });
+    this.volume.pipe(this.opusEncoder);
+    this.opusEncoder.on("data", (packet) => {
+      this.track.writeRtp(packet);
+    });
 
     return this;
   }
@@ -202,6 +213,9 @@ class MediaPlayer extends Media {
     this.emit("start");
     this._write();
   }
+  setVolume(v) {
+    this.VolumeTransformer.setVolume(v);
+  }
   stop() {
     return new Promise(async (res) => {
       this.ffmpeg.kill();
@@ -259,6 +273,7 @@ class MediaPlayer extends Media {
     this.#setupFmpeg();
 
     super.playStream(stream); // start playing
+    return stream;
   }
   async #ffmpegFinished() {
     await this.sleep(1000); // prevent bug with no music after 3rd song
@@ -273,13 +288,14 @@ class MediaPlayer extends Media {
   #setupFmpeg() {
     this.ffmpeg.on("exit", async (c, s) => {
       if (s == "SIGTERM") return; // killed intentionally
+      console.log(c, s);
       this.#ffmpegFinished();
     });
     this.ffmpeg.stdin.on("error", (e) => {
       if (e.code == "EPIPE") return;
       console.log("Ffmpeg error: ", e);
     });
-    if (!this.logs) return;
+    //if (!this.logs) return;
     this.ffmpeg.stderr.on("data", (chunk) => {
       console.log("err", Buffer.from(chunk).toString());
     });
