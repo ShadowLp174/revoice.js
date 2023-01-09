@@ -245,8 +245,8 @@ class MediaPlayer extends Media {
     ]);
   }
   #setupFmpeg() {
-    this.ffmpeg.on("exit", async (_c, s) => {
-      if (s == "SIGTERM") return; // killed intentionally
+    this.ffmpeg.on("exit", async (c, s) => {
+      if (s == "SIGTERM" || c == 255) return; // killed intentionally
       this.#ffmpegFinished();
     });
     this.ffmpeg.stdin.on("error", (e) => {
