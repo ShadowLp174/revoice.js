@@ -60,6 +60,7 @@ class Media {
   destroy() {
     return new Promise((res, rej) => {
       this.track = null;
+      this.ffmpegKilled = true;
       this.ffmpeg.kill();
       this.socket.close(res);
     });
@@ -90,6 +91,7 @@ class MediaPlayer extends Media {
     this.intervals = [];
     this.lastPacket = null;
     this.paused = false;
+    this.ffmpegKilled = false;
 
     return this;
   }
@@ -141,7 +143,7 @@ class MediaPlayer extends Media {
   disconnect(destroy=true, f=true) { // this should be called on leave
     if (destroy) this.track = new MediaStreamTrack({ kind: "audio" }); // clean up the current data and streams
     this.paused = false;
-    if (f) this.ffmpeg.kill();
+    if (f) {this.ffmpegKilled = true; this.ffmpeg.kill();}
     this.originStream.destroy();
     this.currTime = "00:00:00";
 
@@ -185,6 +187,7 @@ class MediaPlayer extends Media {
   }
   stop() {
     return new Promise(async (res) => {
+      this.ffmpegKilled = true;
       this.ffmpeg.kill();
       this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
         ...this.createFfmpegArgs()
@@ -238,6 +241,7 @@ class MediaPlayer extends Media {
     await this.sleep(1000); // prevent bug with no music after 3rd song
     this.socket.send("FINISHPACKET", this.port);
     this.originStream.destroy();
+    this.ffmpegKilled = true;
     this.ffmpeg.kill();
     this.currTime = "00:00:00";
     this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
@@ -245,8 +249,8 @@ class MediaPlayer extends Media {
     ]);
   }
   #setupFmpeg() {
-    this.ffmpeg.on("exit", async (c, s) => {
-      if (s == "SIGTERM" || c == 255) return; // killed intentionally
+    this.ffmpeg.on("exit", async (_c, s) => {
+      if (s == "SIGTERM" || this.ffmpegKilled) return this.ffmpegKilled = false; // killed intentionally
       this.#ffmpegFinished();
     });
     this.ffmpeg.stdin.on("error", (e) => {
