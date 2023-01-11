@@ -60,7 +60,6 @@ class Media {
   destroy() {
     return new Promise((res, rej) => {
       this.track = null;
-      this.ffmpegKilled = true;
       this.ffmpeg.kill();
       this.socket.close(res);
     });
@@ -241,7 +240,6 @@ class MediaPlayer extends Media {
     await this.sleep(1000); // prevent bug with no music after 3rd song
     this.socket.send("FINISHPACKET", this.port);
     this.originStream.destroy();
-    this.ffmpegKilled = true;
     this.ffmpeg.kill();
     this.currTime = "00:00:00";
     this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
