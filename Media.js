@@ -71,20 +71,10 @@ class Media {
 class MediaPlayer extends Media {
   constructor(logs=false, port=5030) {
     super(logs, port, (packet) => {
-      if (!this.started) {
-        this.started = true;
-        this.emit("start");
-      }
-      if (this.paused) {
-        return this._save(packet);
-      }
-
-      if (packet == "FINISHPACKET") return this.finished();
-      //console.log("packet");
-      this.rtpEmitter.emit("packet", packet);
-      //this.opusDecoder.write(packet);
-      //this.track.writeRtp(packet);
+      console.log("ffmpeg")
+      this.track.writeRtp(packet);
     });
+    console.log(port);
     this.isMediaPlayer = true;
 
     this.rtpEmitter = new EventEmitter();
@@ -100,15 +90,14 @@ class MediaPlayer extends Media {
     this.lastPacket = null;
     this.paused = false;
 
+    //this.opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
     this.volume = new prism.VolumeTransformer({ type: 's16le', volume: 1 });//new VolumeTransformer();
-    this.opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
-    this.rtpStream.pipe(this.opusDecoder);
-    this.opusDecoder.pipe(this.volume);
-    this.opusEncoder = new prism.opus.Encoder({ frameSize: 960, channels: 2, rate: 48000 });
-    this.volume.pipe(this.opusEncoder);
-    this.opusEncoder.on("data", (packet) => {
+    this.rtpStream.pipe(this.volume);
+
+    //this.opusDecoder.pipe(this.volume);
+    this.volume.on("data", (packet) => {
       console.log("rtp packet");
-      this.track.writeRtp(packet);
+      this.ffmpeg.stdin.write(packet);
     });
 
     return this;
@@ -177,7 +166,10 @@ class MediaPlayer extends Media {
   disconnect(destroy=true, f=true) { // this should be called on leave
     if (destroy) this.track = new MediaStreamTrack({ kind: "audio" }); // clean up the current data and streams
     this.paused = false;
-    if (f) this.ffmpeg.kill();
+    if (f) {
+      this.ffmpeg.kill();
+      this.rtpFFmpeg.kill();
+    }
     this.originStream.destroy();
     this.currTime = "00:00:00";
 
@@ -185,6 +177,7 @@ class MediaPlayer extends Media {
       this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
         ...this.createFfmpegArgs()
       ]);
+      this.#createRTPFfmpeg();
     }
     this.packets = [];
     this.intervals = [];
@@ -225,9 +218,11 @@ class MediaPlayer extends Media {
   stop() {
     return new Promise(async (res) => {
       this.ffmpeg.kill();
+      this.rtpFFmpeg.kill();
       this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
         ...this.createFfmpegArgs()
       ]);
+      this.#createRTPFfmpeg();
       await this.sleep(1000);
       this.paused = false;
       this.originStream.destroy();
@@ -271,48 +266,77 @@ class MediaPlayer extends Media {
     this.volume.once("data", () => {
       setTimeout(() => {
         this.volume.setVolume(0.5);
+        console.log("------------------------------------------------ setVolume");
       }, 3000);
     });
 
     // ffmpeg stuff
+    this.#createRTPFfmpeg();
     this.#setupFmpeg();
 
-    super.playStream(stream); // start playing
+    this.rtpFfmpeg.stdout.on("data", (packet) => {
+      console.log("data");
+      if (!this.started) {
+        this.started = true;
+        this.emit("start");
+      }
+      if (this.paused) {
+        return this._save(packet);
+      }
+
+      if (packet == "FINISHPACKET") return this.finished();
+      this.rtpEmitter.emit("packet", packet);
+    });
+
+    stream.pipe(this.rtpFfmpeg.stdin);
+    //super.playStream(stream); // start playing
+    console.log(this.ffmpeg.spawnargs);
     return stream;
+  }
+  #createRTPFfmpeg() {
+    let args = () => {
+      return ["-re", "-i", "-", "-vn", "-c:a", "libopus", "-f", "s16le", "pipe:1"] // PCM audio
+    }
+    this.rtpFfmpeg = require("node:child_process").spawn(ffmpeg, args());
   }
   async #ffmpegFinished() {
     await this.sleep(1000); // prevent bug with no music after 3rd song
     this.socket.send("FINISHPACKET", this.port);
     this.originStream.destroy();
+    this.rtpFfmpeg.kill();
     this.ffmpeg.kill();
     this.currTime = "00:00:00";
     this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
       ...this.createFfmpegArgs()
     ]);
+    this.#createRTPFfmpeg();
   }
   #setupFmpeg() {
-    this.ffmpeg.on("exit", async (_c, s) => {
+    this.rtpFfmpeg.on("exit", async (_c, s) => {
       if (s == "SIGTERM") return; // killed intentionally
       console.log(_c, s);
       this.#ffmpegFinished();
     });
-    this.ffmpeg.stdin.on("error", (e) => {
+    this.rtpFfmpeg.stdin.on("error", (e) => {
       if (e.code == "EPIPE") return;
       console.log("Ffmpeg error: ", e);
     });
     //if (!this.logs) return;
-    this.ffmpeg.stderr.on("data", (chunk) => {
+    this.rtpFfmpeg.stderr.on("data", (chunk) => {
       console.log("err", Buffer.from(chunk).toString());
     });
-    this.ffmpeg.stdout.on("data", (chunk) => {
-      console.log("OUT", Buffer.from(chunk().toString()));
+    this.ffmpeg.stderr.on("data", (chunk) => {
+      console.log("info", Buffer.from(chunk).toString());
     });
-    this.ffmpeg.stdout.on("end", () => {
+    /*this.rtpFfmpeg.stdout.on("data", (chunk) => {
+      console.log("OUT", Buffer.from(chunk().toString()));
+    });*/
+    this.rtpFfmpeg.stdout.on("end", () => {
       console.log("finished");
     });
-    this.ffmpeg.stdout.on("readable", () => {
+    /*this.rtpFfmpeg.stdout.on("readable", () => {
       console.log("readable")
-    });
+    });*/
   }
 }
 
