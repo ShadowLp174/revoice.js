@@ -3,6 +3,7 @@ const EventEmitter = require("events");
 const fs = require("fs");
 const ffmpeg = require("ffmpeg-static");
 const prism = require("prism-media");
+const { Readable } = require("stream");
 
 class Media {
   constructor(logs=false, port=5030, packetHandler=(packet)=>{this.track.writeRtp(packet);}) {
@@ -79,9 +80,15 @@ class MediaPlayer extends Media {
       }
 
       if (packet == "FINISHPACKET") return this.finished();
-      this.opusDecoder.write(packet);
+      //console.log("packet");
+      this.rtpEmitter.emit("packet", packet);
+      //this.opusDecoder.write(packet);
+      //this.track.writeRtp(packet);
     });
     this.isMediaPlayer = true;
+
+    this.rtpEmitter = new EventEmitter();
+    this.rtpStream = new MediaPlayer.RTPStream(this.rtpEmitter);
 
     this.emitter = new EventEmitter();
 
@@ -95,10 +102,12 @@ class MediaPlayer extends Media {
 
     this.volume = new prism.VolumeTransformer({ type: 's16le', volume: 1 });//new VolumeTransformer();
     this.opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
+    this.rtpStream.pipe(this.opusDecoder);
     this.opusDecoder.pipe(this.volume);
     this.opusEncoder = new prism.opus.Encoder({ frameSize: 960, channels: 2, rate: 48000 });
     this.volume.pipe(this.opusEncoder);
     this.opusEncoder.on("data", (packet) => {
+      console.log("rtp packet");
       this.track.writeRtp(packet);
     });
 
@@ -112,6 +121,22 @@ class MediaPlayer extends Media {
   }
   emit(event, data) {
     return this.emitter.emit(event, data);
+  }
+
+  static RTPStream = class RTPStream extends Readable {
+    constructor(emitter, opts) {
+      super(opts);
+
+      this.packets = emitter;
+    }
+    async _read() {
+      this.push(await this.newData());
+    }
+    newData() {
+      return new Promise(res => {
+        this.packets.once("packet", res);
+      });
+    }
   }
 
   static timestampToSeconds(timestamp="00:00:00", ceilMinutes=false) {
@@ -243,6 +268,12 @@ class MediaPlayer extends Media {
       this.streamFinished = true;
     });
 
+    this.volume.once("data", () => {
+      setTimeout(() => {
+        this.volume.setVolume(0.5);
+      }, 3000);
+    });
+
     // ffmpeg stuff
     this.#setupFmpeg();
 
@@ -262,7 +293,7 @@ class MediaPlayer extends Media {
   #setupFmpeg() {
     this.ffmpeg.on("exit", async (_c, s) => {
       if (s == "SIGTERM") return; // killed intentionally
-      console.log(c, s);
+      console.log(_c, s);
       this.#ffmpegFinished();
     });
     this.ffmpeg.stdin.on("error", (e) => {
