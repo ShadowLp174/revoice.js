@@ -24,9 +24,9 @@ class Media {
       "-re", "-i", "-", "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + port
     ]);
     if (logs) {
-      this.ffmpeg.stdout.on("data", (data) => {
+      /*this.ffmpeg.stdout.on("data", (data) => {
         console.log(Buffer.from(data).toString());
-      })
+      })*/
       this.ffmpeg.stderr.on("data", (data) => {
         console.log(Buffer.from(data).toString());
       });
@@ -41,7 +41,7 @@ class Media {
     return "Unimplemented";
   }
   createFfmpegArgs(start="00:00:00") {
-    return ["-re", "-i", "-", "-ss", start, "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + this.port]
+    return this.ffmpegArgs || ["-re", "-i", "-", "-ss", start, "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + this.port]
   }
   getMediaTrack() {
     return this.track;
@@ -77,6 +77,13 @@ class MediaPlayer extends Media {
     console.log(port);
     this.isMediaPlayer = true;
 
+    this.ffmpeg.on("error", console.log);
+    this.ffmpeg.on("message", console.log);
+    this.ffmpeg.on("close", console.log);
+    this.ffmpeg.on("disconnect", console.log);
+    this.ffmpeg.on("exit", console.log);
+    //this.ffmpegArgs = ["-i", "-", "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + this.port];
+
     this.rtpEmitter = new EventEmitter();
     this.rtpStream = new MediaPlayer.RTPStream(this.rtpEmitter);
 
@@ -92,7 +99,8 @@ class MediaPlayer extends Media {
 
     //this.opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
     this.volume = new prism.VolumeTransformer({ type: 's16le', volume: 1 });//new VolumeTransformer();
-    this.rtpStream.pipe(this.volume);
+    //this.rtpStream.pipe(this.volume);
+    this.rtpStream.pipe(this.ffmpeg.stdin);
 
     //this.opusDecoder.pipe(this.volume);
     this.volume.on("data", (packet) => {
@@ -275,7 +283,6 @@ class MediaPlayer extends Media {
     this.#setupFmpeg();
 
     this.rtpFfmpeg.stdout.on("data", (packet) => {
-      console.log("data");
       if (!this.started) {
         this.started = true;
         this.emit("start");
@@ -286,6 +293,7 @@ class MediaPlayer extends Media {
 
       if (packet == "FINISHPACKET") return this.finished();
       this.rtpEmitter.emit("packet", packet);
+      //this.ffmpeg.stdin.write(packet);
     });
 
     stream.pipe(this.rtpFfmpeg.stdin);
