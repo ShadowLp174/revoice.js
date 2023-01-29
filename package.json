@@ -1,10 +1,12 @@
 {
   "name": "revoice.js",
-  "version": "0.1.737",
+  "version": "0.1.738",
   "description": "A voice module for Revolt",
   "main": "index.js",
+  "typings": "./typings/index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified. For tests see experimental branch.\" && exit 1"
+    "test": "echo \"Error: no test specified. For tests see experimental branch.\" && exit 1",
+    "typegen": "tsc"
   },
   "keywords": [
     "voice",
@@ -37,5 +39,9 @@
     "msc-node": "^0.0.10",
     "revolt-api": "^0.5.5",
     "ws": "^8.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.11.18",
+    "typescript": "^4.9.4"
   }
 }
