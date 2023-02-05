@@ -22,7 +22,7 @@
     "src/Revoice.js",
     "src/Signaling.js",
     "src/User.js",
-    "Index.js"
+    "index.js"
   ],
   "repository": {
     "type": "git",
