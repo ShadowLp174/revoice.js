@@ -18,10 +18,11 @@
     "voice channels"
   ],
   "files": [
-    "Media.js",
-    "Revoice.js",
-    "Signaling.js",
-    "User.js"
+    "src/Media.js",
+    "src/Revoice.js",
+    "src/Signaling.js",
+    "src/User.js",
+    "index.js"
   ],
   "repository": {
     "type": "git",
