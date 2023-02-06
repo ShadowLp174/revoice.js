@@ -5,6 +5,7 @@ const { Device, useSdesMid, RTCRtpCodecParameters } = require("msc-node");
 
 class VoiceConnection extends EventEmitter {
   constructor(channelId, voice, opts) {
+    super();
     this.voice = voice;
     this.channelId = channelId;
 
@@ -185,6 +186,7 @@ class Revoice extends EventEmitter {
     VC_ERROR: "vce", // there was an error fetching data about the voice channel
   }
   constructor(token) {
+    super();
     this.api = new API({ authentication: { revolt: token }});
     this.signals = new Map();
     this.signaling = new Signaling(this.api);
