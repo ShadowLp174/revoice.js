@@ -39,6 +39,7 @@ export class MediaPlayer extends Media {
     disconnect(destroy?: boolean, f?: boolean): void;
     destroy(): Promise<[any, any]>;
     finished(): void;
+    setVolume(v?: number): void;
     pause(): void;
     resume(): void;
     stop(): Promise<any>;
