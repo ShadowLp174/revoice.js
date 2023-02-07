@@ -199,6 +199,7 @@ class MediaPlayer extends Media {
    * @return {void}
    */
   _write() {
+    if (this.playbackPaused) return this.writing = false;
     if (this.packets.length == 0) { this.paused = false; return this.writing = false;}
     this.writing = true;
     let interval = this.intervals.shift();
@@ -273,8 +274,9 @@ class MediaPlayer extends Media {
    * @return {void}
    */
   pause() {
-    if (this.paused) return;
-    this.paused = true;
+    if (this.playbackPaused) return;
+    this.playbackPaused = true;
+    this.paused = true; // re-route packets from ffmpeg to the temporary buffers
     this.emit("pause");
   }
   /**
@@ -283,7 +285,8 @@ class MediaPlayer extends Media {
    * @return {void}
    */
   resume() {
-    if (!this.paused) return;
+    if (!this.playbackPaused) return;
+    this.playbackPaused = false;
     this.emit("start");
     this._write();
   }
@@ -339,6 +342,17 @@ class MediaPlayer extends Media {
   get transport() {
     return this.sendTransport;
   }
+  processPacket(packet) {
+    if (!this.started) {
+      this.started = true;
+      this.emit("start");
+    }
+    if (this.paused) {
+      return this._save(packet);
+    }
+    if (packet == "FINISHPACKET") return this.finished();
+    this.writePacket(packet);
+  };
 
   /**
    * @description Play an audio read stream to the media track.
@@ -369,17 +383,7 @@ class MediaPlayer extends Media {
     this.fpcm = fpcm;
     this.pcm = pcm;
 
-    pcm.on("data", (packet) => {
-      if (!this.started) {
-        this.started = true;
-        this.emit("start");
-      }
-      if (this.paused) {
-        return this._save(packet);
-      }
-      if (packet == "FINISHPACKET") return this.finished();
-      this.writePacket(packet);
-    });
+    pcm.on("data", (c)=>this.processPacket(c));
 
     // ffmpeg stuff
     this.#setupFmpeg();
@@ -388,7 +392,7 @@ class MediaPlayer extends Media {
   }
   async #ffmpegFinished() {
     await this.sleep(1000); // prevent bug with no music after 3rd song
-    this.socket.send("FINISHPACKET", this.port);
+    this.processPacket("FINISHPACKET");
     this.originStream.destroy();
     this.ffmpeg.kill();
     this.fpcm.kill("SIGINT");
