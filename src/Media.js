@@ -2,6 +2,7 @@ const { MediaStreamTrack } = require("msc-node");
 const EventEmitter = require("events");
 const fs = require("fs");
 const ffmpeg = require("ffmpeg-static");
+const prism = require("prism-media");
 
 /**
  * @class
@@ -130,18 +131,10 @@ class MediaPlayer extends Media {
    * @param  {string} iFormat="" Optional arguments that specify the input format that are passed to ffmpeg
    * @return {MediaPlayer}            The new instance.
    */
-  constructor(logs=false, port=5030, iFormat) {
+  constructor(logs=false, port=5030) {
     super(logs, port, (packet) => {
-      if (!this.started) {
-        this.started = true;
-        this.emit("start");
-      }
-      if (this.paused) {
-        return this._save(packet);
-      }
-      if (packet == "FINISHPACKET") return this.finished();
       this.track.writeRtp(packet);
-    }, iFormat);
+    }, "-f s16le -ar 48000 -ac 2");
     this.isMediaPlayer = true;
 
     this.emitter = new EventEmitter();
@@ -154,6 +147,11 @@ class MediaPlayer extends Media {
     this.lastPacket = null;
     this.paused = false;
     this.ffmpegKilled = false;
+
+    this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: 1 });
+    this.volumeTransformer.on("data", (packet) => {
+      this.ffmpeg.stdin.write(packet);
+    });
 
     return this;
   }
@@ -209,9 +207,12 @@ class MediaPlayer extends Media {
         this.finished();
         return this._write();
       }
-      this.track.writeRtp(packet);
+      this.writePacket(packet);
       this._write();
     }, interval);
+  }
+  writePacket(packet) {
+    this.volumeTransformer.write(packet);
   }
   /**
    * @description Cleans up this instance. Should be called when the bot is leaving.
@@ -286,6 +287,15 @@ class MediaPlayer extends Media {
     this._write();
   }
   /**
+   * @description Set the volume of the current playback
+   *
+   * @param  {type} v=1 The new volume. 0 = nothing, 0.5 = half, 1 = default; Stay in between 0 and 1 to prevent bad music quality
+   * @return {void}
+   */
+  setVolume(v=1) {
+    return this.volumeTransformer.setVolume(v);
+  }
+  /**
    * @description Stop the playback.
    *
    * @return {Promise<void>} Resolves when all is cleaned up.
@@ -344,10 +354,35 @@ class MediaPlayer extends Media {
       this.streamFinished = true;
     });
 
+    const pcm = new prism.FFmpeg({
+      args: [
+        "-re", "-i", "-",
+        "-analyzeduration", "0",
+        "-loglevel", "0",
+        "-f", "s16le",
+        "-ar", "48000",
+        "-ac", "2",
+      ],
+    });
+
+    pcm.on("data", (packet) => {
+      if (!this.started) {
+        this.started = true;
+        this.emit("start");
+      }
+      if (this.paused) {
+        return this._save(packet);
+      }
+      if (packet == "FINISHPACKET") return this.finished();
+      this.writePacket(packet);
+    });
+
+    stream.once("data", () => console.log("started"));
+
     // ffmpeg stuff
     this.#setupFmpeg();
 
-    super.playStream(stream); // start playing
+    stream.pipe(pcm); // start playing
   }
   async #ffmpegFinished() {
     await this.sleep(1000); // prevent bug with no music after 3rd song
@@ -365,7 +400,7 @@ class MediaPlayer extends Media {
       this.#ffmpegFinished();
     });
     this.ffmpeg.stdin.on("error", (e) => {
-      //if (e.code == "EPIPE") return;
+      if (e.code == "EPIPE") return;
       console.log("Ffmpeg error: ", e);
     });
     if (!this.logs) return;
