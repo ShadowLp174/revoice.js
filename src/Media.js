@@ -377,8 +377,6 @@ class MediaPlayer extends Media {
       this.writePacket(packet);
     });
 
-    stream.once("data", () => console.log("started"));
-
     // ffmpeg stuff
     this.#setupFmpeg();
 
