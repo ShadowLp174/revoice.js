@@ -3,7 +3,6 @@ const EventEmitter = require("events");
 const fs = require("fs");
 const ffmpeg = require("ffmpeg-static");
 
-
 /**
  * @class
  * @classdesc Basic class to process audio streams
@@ -18,7 +17,7 @@ class Media {
    *
    * @return {Media} The new Media object instance
    */
-  constructor(logs=false, port=5030, packetHandler=(packet)=>{this.track.writeRtp(packet);}) {
+  constructor(logs=false, port=5030, packetHandler=(packet)=>{this.track.writeRtp(packet);}, inputFormat="") {
     this.track = new MediaStreamTrack({ kind: "audio" });
     this.socket = require("dgram").createSocket("udp4");
     this.socket.bind(port);
@@ -27,14 +26,13 @@ class Media {
       packetHandler(packet); // defined in constructor params
     })
 
+    this.inputFormat = inputFormat.trim() + " ";
     this.port = port;
     this.logs = logs;
     this.playing = false;
     this.isMedia = true;
 
-    this.ffmpeg = require("child_process").spawn(ffmpeg, [
-      "-re", "-i", "-", "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + port
-    ]);
+    this.ffmpeg = require("child_process").spawn(ffmpeg, this.ffmpegArgs(port));
     if (logs) {
       this.ffmpeg.stdout.on("data", (data) => {
         console.log(Buffer.from(data).toString());
@@ -52,6 +50,10 @@ class Media {
   once(event, cb) {
     return "Unimplemented";
   }
+
+  ffmpegArgs(port) {
+    return ("-re " + this.inputFormat + "-i - -map 0:a -b:a 48k -maxrate 48k -acodec libopus -ar 48000 -ac 2 -f rtp rtp://127.0.0.1:" + port).split(" ");
+  }
   /**
    * Returns an array of arguments that can be passed to ffmpeg
    *
@@ -59,7 +61,7 @@ class Media {
    * @return {Array<string>}           The arguments.
    */
   createFfmpegArgs(start="00:00:00") {
-    return ["-re", "-i", "-", "-ss", start, "-map", "0:a", "-b:a", "48k", "-maxrate", "48k", "-c:a", "libopus", "-f", "rtp", "rtp://127.0.0.1:" + this.port]
+    return this.ffmpegArgs(this.port);
   }
   /**
    * @description Returns the current mediasoup media track
@@ -125,9 +127,10 @@ class MediaPlayer extends Media {
    *
    * @param  {boolean} logs=false Wether or not to print logs to the console or not.
    * @param  {number} port=5030  The port this instance should use.
+   * @param  {string} iFormat="" Optional arguments that specify the input format that are passed to ffmpeg
    * @return {MediaPlayer}            The new instance.
    */
-  constructor(logs=false, port=5030) {
+  constructor(logs=false, port=5030, iFormat) {
     super(logs, port, (packet) => {
       if (!this.started) {
         this.started = true;
@@ -138,7 +141,7 @@ class MediaPlayer extends Media {
       }
       if (packet == "FINISHPACKET") return this.finished();
       this.track.writeRtp(packet);
-    });
+    }, iFormat);
     this.isMediaPlayer = true;
 
     this.emitter = new EventEmitter();
@@ -362,7 +365,7 @@ class MediaPlayer extends Media {
       this.#ffmpegFinished();
     });
     this.ffmpeg.stdin.on("error", (e) => {
-      if (e.code == "EPIPE") return;
+      //if (e.code == "EPIPE") return;
       console.log("Ffmpeg error: ", e);
     });
     if (!this.logs) return;
