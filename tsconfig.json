@@ -11,6 +11,8 @@
         "allowJs": true,
         // Generate d.ts files
         "declaration": true,
+        // keep jsdoc comments
+        "removeComments": false,
         // This compiler run should
         // only output d.ts files
         "emitDeclarationOnly": true,

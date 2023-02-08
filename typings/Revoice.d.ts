@@ -1,5 +1,5 @@
 export = Revoice;
-declare class Revoice {
+declare class Revoice extends EventEmitter {
     static createDevice(): Device;
     static State: {
         OFFLINE: string;
@@ -17,10 +17,9 @@ declare class Revoice {
     };
     static uid(): string;
     constructor(token: any);
-    api: any;
+    api: API;
     signals: Map<any, any>;
     signaling: Signaling;
-    eventemitter: EventEmitter;
     transports: Map<any, any>;
     devices: Map<any, any>;
     connected: any[];
@@ -28,9 +27,6 @@ declare class Revoice {
     users: Map<any, any>;
     state: string;
     updateState(state: any): void;
-    on(event: any, cb: any): EventEmitter;
-    once(event: any, cb: any): EventEmitter;
-    emit(event: any, data: any): boolean;
     getUser(id: any): false | {
         user: any;
         connection?: undefined;
@@ -42,7 +38,8 @@ declare class Revoice {
     join(channelId: any, leaveIfEmpty?: boolean): Promise<any>;
     getVoiceConnection(channelId: any): any;
 }
-import Signaling = require("./Signaling.js");
 import EventEmitter = require("events");
+import { API } from "revolt-api";
+import Signaling = require("./Signaling.js");
 import { Device } from "msc-node";
 //# sourceMappingURL=Revoice.d.ts.map

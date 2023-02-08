@@ -6,7 +6,8 @@
   "typings": "./typings/index.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified. For tests see experimental branch.\" && exit 1",
-    "docs": "jsdoc -c jsdoc.json"
+    "docs": "jsdoc -c jsdoc.json",
+    "typings": "tsc -p ."
   },
   "keywords": [
     "voice",
