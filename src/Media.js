@@ -150,9 +150,7 @@ class MediaPlayer extends Media {
     this.ffmpegKilled = false;
 
     this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: 1 });
-    this.volumeTransformer.on("data", (packet) => {
-      this.ffmpeg.stdin.write(packet);
-    });
+    this.volumeTransformer.pipe(this.ffmpeg.stdin);
 
     return this;
   }
@@ -226,8 +224,20 @@ class MediaPlayer extends Media {
   disconnect(destroy=true, f=true) { // this should be called on leave
     if (destroy) this.track = new MediaStreamTrack({ kind: "audio" }); // clean up the current data and streams
     this.paused = false;
-    if (f) {this.ffmpegKilled = true; this.ffmpeg.kill(); this.fpcm.kill();}
-    this.originStream.destroy();
+    if (f) {
+      // prevent EPIPE errors
+      this.originStream.unpipe(this.fpcm.stdin);
+      const vol = this.volumeTransformer.volume;
+      this.volumeTransformer.unpipe(this.ffmpeg.stdin);
+      this.volumeTransformer.destroy();
+
+      this.ffmpegKilled = true;
+      this.ffmpeg.kill();
+      this.fpcm.kill();
+
+      this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: vol });
+      this.volumeTransformer.pipe(this.ffmpeg.stdin);
+    }
     this.currTime = "00:00:00";
 
     if (f) {
@@ -293,7 +303,7 @@ class MediaPlayer extends Media {
   /**
    * @description Set the volume of the current playback
    *
-   * @param  {type} v=1 The new volume. 0 = nothing, 0.5 = half, 1 = default; Stay in between 0 and 1 to prevent bad music quality
+   * @param  {number} v=1 The new volume. 0 = nothing, 0.5 = half, 1 = default; Stay in between 0 and 1 to prevent bad music quality
    * @return {void}
    */
   setVolume(v=1) {
@@ -307,14 +317,22 @@ class MediaPlayer extends Media {
   stop() {
     return new Promise(async (res) => {
       this.ffmpegKilled = true;
-      this.ffmpeg.kill();
+
+      // prevent EPIPE errors
+      this.originStream.unpipe(this.fpcm.stdin);
+      const vol = this.volumeTransformer.volume;
+      this.volumeTransformer.unpipe(this.ffmpeg.stdin);
+      this.volumeTransformer.destroy();
+
       this.fpcm.kill();
+      this.ffmpeg.kill();
       this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
         ...this.createFfmpegArgs()
       ]);
       await this.sleep(1000);
+      this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: vol });
+      this.volumeTransformer.pipe(this.ffmpeg.stdin);
       this.paused = false;
-      this.originStream.destroy();
 
       this.packets = [];
       this.intervals = [];
@@ -388,7 +406,7 @@ class MediaPlayer extends Media {
     // ffmpeg stuff
     this.#setupFmpeg();
 
-    stream.pipe(fpcm.stdin); // start playing
+    this.originStream.pipe(fpcm.stdin); // start playing
   }
   async #ffmpegFinished() {
     await this.sleep(1000); // prevent bug with no music after 3rd song
