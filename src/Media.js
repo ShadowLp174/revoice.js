@@ -221,7 +221,7 @@ class MediaPlayer extends Media {
    * @param  {boolean} f=true       Wether or not to respawn the ffmpeg instance.
    * @return {void}
    */
-  disconnect(destroy=true, f=true) { // this should be called on leave
+  async disconnect(destroy=true, f=true) { // this should be called on leave
     if (destroy) this.track = new MediaStreamTrack({ kind: "audio" }); // clean up the current data and streams
     this.paused = false;
     if (f) {
@@ -234,17 +234,16 @@ class MediaPlayer extends Media {
       this.ffmpegKilled = true;
       this.ffmpeg.kill();
       this.fpcm.kill();
+      this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
+        ...this.createFfmpegArgs()
+      ]);
+      await this.sleep(1000);
 
       this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: vol });
       this.volumeTransformer.pipe(this.ffmpeg.stdin);
     }
     this.currTime = "00:00:00";
 
-    if (f) {
-      this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
-        ...this.createFfmpegArgs()
-      ]);
-    }
     this.packets = [];
     this.intervals = [];
     this.started = false
@@ -272,10 +271,9 @@ class MediaPlayer extends Media {
    * @return {void}
    */
   finished() {
-    this.track = new MediaStreamTrack({ kind: "audio" });
     this.playing = false;
     this.paused = false;
-    this.disconnect(false, false);
+    this.disconnect();
     this.emit("finish");
   }
   /**
