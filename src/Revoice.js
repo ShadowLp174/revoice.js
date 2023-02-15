@@ -49,6 +49,7 @@ class VoiceConnection extends EventEmitter {
       this.initLeave();
       signaling.users.forEach((user) => {
         this.voice.users.set(user.id, user);
+        this.users.push(user);
       });
     });
     signaling.on("userjoin", (user) => {
@@ -98,11 +99,7 @@ class VoiceConnection extends EventEmitter {
     this.emit("join");
   }
   resetUser(user) {
-    console.log("reset", user);
-    const old = this.voice.users.get(user.id);
-    old.connected = false;
-    old.connectedTo = null;
-    this.voice.users.set(user.id, old);
+    this.emit("userLeave", user);
   }
   async play(media) {
     this.updateState(((!media.isMediaPlayer) ? Revoice.State.UNKNOWN : Revoice.State.BUFFERING));
@@ -174,7 +171,7 @@ class Revoice extends EventEmitter {
           new RTCRtpCodecParameters({
             mimeType: "audio/opus",
             clockRate: 48000,
-            preferredPayloadType: 100,
+            payloadType: 100,
             channels: 2
           })
         ]
@@ -250,6 +247,13 @@ class Revoice extends EventEmitter {
         });
         connection.on("autoleave", () => {
           this.connections.delete(channelId);
+        });
+        connection.on("userLeave", (u) => {
+          if (!this.users.has(u.id)) return; // is leaving anyway
+          const user = this.users.get(u.id);
+          user.connected = false;
+          user.connectedTo = null;
+          this.users.set(u.id, user);
         });
         connection.updateState(Revoice.State.JOINING);
         this.connections.set(channelId, connection);

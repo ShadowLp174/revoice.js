@@ -323,6 +323,7 @@ class MediaPlayer extends Media {
       this.volumeTransformer.destroy();
 
       this.fpcm.kill();
+      this.pcm.destroy();
       this.ffmpeg.kill();
       this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
         ...this.createFfmpegArgs()
@@ -331,6 +332,7 @@ class MediaPlayer extends Media {
       this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: vol });
       this.volumeTransformer.pipe(this.ffmpeg.stdin);
       this.paused = false;
+      this.playbackPaused = false;
 
       this.packets = [];
       this.intervals = [];
