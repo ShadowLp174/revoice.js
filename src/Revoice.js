@@ -9,6 +9,8 @@ class VoiceConnection extends EventEmitter {
     this.voice = voice;
     this.channelId = channelId;
 
+    this.users = [];
+
     this.device = opts.device;
     this.signaling = opts.signaling;
     this.setupSignaling();
@@ -51,6 +53,7 @@ class VoiceConnection extends EventEmitter {
     });
     signaling.on("userjoin", (user) => {
       this.voice.users.set(user.id, user);
+      this.users.push(user);
       if (this.leaving) {
         clearTimeout(this.leaving);
         this.leaving = null;
@@ -58,10 +61,9 @@ class VoiceConnection extends EventEmitter {
       this.emit("userjoin", user);
     });
     signaling.on("userleave", (user) => {
-      const old = this.voice.users.get(user.id);
-      old.connected = false;
-      old.connectedTo = null;
-      this.voice.users.set(user.id, old);
+      this.resetUser(user);
+      const idx = this.users.findIndex(u => u.id == user.id);
+      if (idx !== -1) this.users.splice(idx, 1);
       this.initLeave();
       this.emit("userleave", user);
     });
@@ -94,6 +96,13 @@ class VoiceConnection extends EventEmitter {
 
     this.updateState(Revoice.State.IDLE);
     this.emit("join");
+  }
+  resetUser(user) {
+    console.log("reset", user);
+    const old = this.voice.users.get(user.id);
+    old.connected = false;
+    old.connectedTo = null;
+    this.voice.users.set(user.id, old);
   }
   async play(media) {
     this.updateState(((!media.isMediaPlayer) ? Revoice.State.UNKNOWN : Revoice.State.BUFFERING));
@@ -144,6 +153,7 @@ class VoiceConnection extends EventEmitter {
     });
   }
   async leave() {
+    this.users.forEach(u => this.resetUser(u))
     this.updateState(Revoice.State.OFFLINE);
     await this.disconnect();
     if (this.media) this.media.disconnect();

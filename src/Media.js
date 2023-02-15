@@ -96,7 +96,7 @@ class Media {
   /**
    * Pipe a ReadStream into the ffmpeg process.
    *
-   * @param  {Stream} stream The stream to pipe.
+   * @param  {ReadableStream} stream The stream to pipe.
    * @return {void}
    */
   playStream(stream) {
