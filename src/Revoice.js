@@ -170,6 +170,8 @@ class VoiceConnection extends EventEmitter {
   }
 
   async leave() {
+    this.users.forEach(u => this.resetUser(u))
+    this.updateState(Revoice.State.OFFLINE);
 
     // Disconnect from the server
     await this.disconnect();
