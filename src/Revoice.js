@@ -75,24 +75,65 @@ class VoiceConnection extends EventEmitter {
       clearTimeout(this.leaving);
       this.leaving = null;
     }
-    if (!(signaling.roomEmpty && this.leaveTimeout)) return;
-    this.leaving = setTimeout(() => {
-      this.once("leave", () => {
-        this.destroy();
-        this.emit("autoleave");
-      });
-      this.leave();
-    }, this.leaveTimeout * 1000);
+    if (signaling?.roomEmpty && this.leaveTimeout) {
+      this.leaving = setTimeout(() => {
+        this.once("leave", () => {
+          try {
+            this.destroy();
+          } catch (err) {
+            console.error("Failed to destroy Revoice instance:", err);
+          }
+          this.emit("autoleave");
+        });
+        this.leave();
+      }, this.leaveTimeout * 1000);
+    }
   }
   initTransports(data) {
-    this.sendTransport = this.device.createSendTransport({ ...data.data.sendTransport });
-    this.sendTransport.on("connect", ({ dtlsParameters }, callback) => {
-      this.signaling.connectTransport(this.sendTransport.id, dtlsParameters).then(callback);
+    const { sendTransport } = data.data;
+    this.sendTransport = this.device.createSendTransport({ ...sendTransport });
+
+    this.sendTransport.on("connect", async ({ dtlsParameters }, callback) => {
+      try {
+        await this.signaling.connectTransport(this.sendTransport.id, dtlsParameters);
+        callback();
+      } catch (err) {
+        console.error("Failed to connect transport:", err);
+      }
     });
-    this.sendTransport.on("produce", (parameters, callback) => {
-      this.signaling.startProduce("audio", parameters.rtpParameters).then((cid) => {
+
+    this.sendTransport.on("produce", async (parameters, callback) => {
+      try {
+        const cid = await this.signaling.startProduce("audio", parameters.rtpParameters);
         callback({ cid });
-      });
+      } catch (err) {
+        console.error("Failed to start producing:", err);
+      }
+    });
+
+    this.updateState(Revoice.State.IDLE);
+    this.emit("join");
+  }
+  initTransports(data) {
+    const { sendTransport } = data.data;
+    this.sendTransport = this.device.createSendTransport({ ...sendTransport });
+
+    this.sendTransport.on("connect", async ({ dtlsParameters }, callback) => {
+      try {
+        await this.signaling.connectTransport(this.sendTransport.id, dtlsParameters);
+        callback();
+      } catch (err) {
+        console.error("Failed to connect transport:", err);
+      }
+    });
+
+    this.sendTransport.on("produce", async (parameters, callback) => {
+      try {
+        const cid = await this.signaling.startProduce("audio", parameters.rtpParameters);
+        callback({ cid });
+      } catch (err) {
+        console.error("Failed to start producing:", err);
+      }
     });
 
     this.updateState(Revoice.State.IDLE);
@@ -102,11 +143,16 @@ class VoiceConnection extends EventEmitter {
     this.emit("userLeave", user);
   }
   async play(media) {
-    this.updateState(((!media.isMediaPlayer) ? Revoice.State.UNKNOWN : Revoice.State.BUFFERING));
+    const isMediaPlayer = media.isMediaPlayer;
+    this.updateState(isMediaPlayer ? Revoice.State.BUFFERING : Revoice.State.UNKNOWN);
 
     media.on("finish", () => {
       this.signaling.stopProduce();
-      this.producer.close();
+      try {
+        this.producer.close();
+      } catch (err) {
+        console.error("Failed to close producer:", err);
+      }
       this.updateState(Revoice.State.IDLE);
     });
     media.on("buffer", (producer) => {
@@ -119,73 +165,52 @@ class VoiceConnection extends EventEmitter {
     media.on("pause", () => {
       this.updateState(Revoice.State.PAUSED);
     });
+
     this.media = media;
     this.media.transport = this.sendTransport;
+
     return this.producer;
   }
   closeTransport() {
-    if (!this.sendTransport) {
-      return Promise.resolve();
-    }
-
-    return new Promise((resolve, reject) => {
-      this.sendTransport.once("closed", () => {
-        this.sendTransport = null;
-        resolve();
+    return new Promise((res) => {
+      this.sendTransport.once("close", () => {
+        this.sendTransport = undefined;
+        res();
       });
-
-      // handle transport errors and close it
-      this.sendTransport.on("connectionstatechange", (state) => {
-        if (state === "failed") {
-          this.sendTransport.close();
-          reject(new Error("Transport closed due to failure."));
-        }
-      });
-
       this.sendTransport.close();
     });
   }
-  disconnect() {
-    return new Promise((resolve, reject) => {
-      try {
-        this.signaling.disconnect();
-        this.closeTransport().then(() => {
-          // just a temporary fix till vortex rewrite
-        });
-        this.device = Revoice.createDevice();
-        resolve();
-      } catch (err) {
-        reject(err);
-      }
-    });
+  async disconnect() {
+    await Promise.all([
+      this.signaling.disconnect(),
+      this.closeTransport(),
+    ]);
+    // just a temporary fix till vortex rewrite
   }
   async destroy() {
     try {
       await this.disconnect();
-      if (this.media) await this.media.destroy();
-      return Promise.resolve();
-    } catch (error) {
-      return Promise.reject(error);
+      if (this.media) {
+        await this.media.destroy();
+      }
+    } catch (err) {
+      console.error(err);
+      throw err;
     }
   }
-
   async leave() {
-    this.users.forEach(u => this.resetUser(u))
-    this.updateState(Revoice.State.OFFLINE);
-
-    // Disconnect from the server
-    await this.disconnect();
-
-    // Disconnect from the media server
-    if (this.media) {
-      await this.media.disconnect();
+    try {
+      await Promise.all(this.users.map(u => this.resetUser(u)));
+      this.updateState(Revoice.State.OFFLINE);
+      await this.disconnect();
+      if (this.media) {
+        await this.media.disconnect();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      this.emit("leave");
     }
-
-    // Update the state to offline
-    this.updateState(Revoice.State.OFFLINE);
-
-    // Emit the leave event
-    this.emit("leave");
   }
 }
 
