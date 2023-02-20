@@ -36,7 +36,7 @@ class VoiceConnection extends EventEmitter {
 
   setupSignaling() {
     const signaling = this.signaling;
-    signaling.on("token", () => {});
+    signaling.on("token", () => { });
     signaling.on("authenticate", (data) => {
       this.device.load({ routerRtpCapabilities: data.data.rtpCapabilities });
     });
@@ -85,7 +85,7 @@ class VoiceConnection extends EventEmitter {
     }, this.leaveTimeout * 1000);
   }
   initTransports(data) {
-    this.sendTransport = this.device.createSendTransport({...data.data.sendTransport});
+    this.sendTransport = this.device.createSendTransport({ ...data.data.sendTransport });
     this.sendTransport.on("connect", ({ dtlsParameters }, callback) => {
       this.signaling.connectTransport(this.sendTransport.id, dtlsParameters).then(callback);
     });
@@ -124,36 +124,65 @@ class VoiceConnection extends EventEmitter {
     return this.producer;
   }
   closeTransport() {
-    return new Promise((res) => {
-      this.sendTransport.once("close", () => {
-        this.sendTransport = undefined;
-        res();
+    if (!this.sendTransport) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      this.sendTransport.once("closed", () => {
+        this.sendTransport = null;
+        resolve();
       });
+
+      // handle transport errors and close it
+      this.sendTransport.on("connectionstatechange", (state) => {
+        if (state === "failed") {
+          this.sendTransport.close();
+          reject(new Error("Transport closed due to failure."));
+        }
+      });
+
       this.sendTransport.close();
     });
   }
   disconnect() {
-    return new Promise((res) => {
-      this.signaling.disconnect();
-      this.closeTransport().then(() => {
-        // just a temporary fix till vortex rewrite
-      });
-      this.device = Revoice.createDevice();
-      res();
+    return new Promise((resolve, reject) => {
+      try {
+        this.signaling.disconnect();
+        this.closeTransport().then(() => {
+          // just a temporary fix till vortex rewrite
+        });
+        this.device = Revoice.createDevice();
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
     });
   }
-  destroy() {
-    return new Promise(async (res) => {
-      this.disconnect();
+  async destroy() {
+    try {
+      await this.disconnect();
       if (this.media) await this.media.destroy();
-      res();
-    });
+      return Promise.resolve();
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
+
   async leave() {
-    this.users.forEach(u => this.resetUser(u))
-    this.updateState(Revoice.State.OFFLINE);
+
+    // Disconnect from the server
     await this.disconnect();
-    if (this.media) this.media.disconnect();
+
+    // Disconnect from the media server
+    if (this.media) {
+      await this.media.disconnect();
+    }
+
+    // Update the state to offline
+    this.updateState(Revoice.State.OFFLINE);
+
+    // Emit the leave event
     this.emit("leave");
   }
 }
@@ -178,7 +207,7 @@ class Revoice extends EventEmitter {
       }
     });
   }
-  static State =  {
+  static State = {
     OFFLINE: "off", // not joined anywhere
     IDLE: "idle", // joined, but not playing
     BUFFERING: "buffer", // joined, buffering data
@@ -194,7 +223,7 @@ class Revoice extends EventEmitter {
   }
   constructor(token) {
     super();
-    this.api = new API({ authentication: { revolt: token }});
+    this.api = new API({ authentication: { revolt: token } });
     this.signals = new Map();
     this.signaling = new Signaling(this.api);
 
@@ -229,7 +258,7 @@ class Revoice extends EventEmitter {
     return this.users.has(id);
   }
 
-  join(channelId, leaveIfEmpty=false) { // leaveIfEmpty == amount of seconds the bot will wait before leaving if the room is empty
+  join(channelId, leaveIfEmpty = false) { // leaveIfEmpty == amount of seconds the bot will wait before leaving if the room is empty
     return new Promise((res, rej) => {
       this.api.get("/channels/" + channelId).then(data => {
         if (data.channel_type != "VoiceChannel") return rej(Revoice.Error.NOT_A_VC);
