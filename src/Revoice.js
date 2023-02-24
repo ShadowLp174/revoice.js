@@ -158,6 +158,14 @@ class VoiceConnection extends EventEmitter {
   }
 }
 
+
+/**
+ * Login information required, when you want to use a user account and not a bot. Please note that an account with MFA will not work.
+ * @typedef {Object} Login
+ * @property {String} email The email of the account.
+ * @property {Stirng} password The password of the account.
+ */
+
 class Revoice extends EventEmitter {
   static createDevice() {
     return new Device({
@@ -192,9 +200,18 @@ class Revoice extends EventEmitter {
     NOT_A_VC: "novc", // joining failed because the bot is already connected to the channel
     VC_ERROR: "vce", // there was an error fetching data about the voice channel
   }
-  constructor(token) {
+
+  /**
+   * @description Initiate a new Revoice instance
+   *
+   * @param  {(Login|string)} loginData The way to login. If you're using a bot use your token, otherwise specify an email and password.
+   * @return {Revoice}
+   */
+  constructor(loginData) {
     super();
-    this.api = new API({ authentication: { revolt: token }});
+    this.session = null;
+    this.login(loginData);
+
     this.signals = new Map();
     this.signaling = new Signaling(this.api);
 
@@ -208,6 +225,22 @@ class Revoice extends EventEmitter {
     this.state = Revoice.State.OFFLINE;
 
     return this;
+  }
+  async login(data) {
+    if (!data.email) return this.api = new API({ authentication: { revolt: data }});
+
+    this.api = new API();
+    const d = await this.api.post("/auth/session/login", data);
+    if (d.result != "Success") throw "MFA not implemented or login not successfull!";
+    this.session = d;
+    this.connect();
+  }
+  async connect() {
+    this.api = new API({
+      authentication: {
+        revolt: this.session
+      }
+    });
   }
   updateState(state) {
     this.state = state;

@@ -159,13 +159,6 @@ export class MediaPlayer extends Media {
     get transport(): any;
     sendTransport: any;
     processPacket(packet: any): void;
-    /**
-     * @description Play an audio read stream to the media track.
-     *
-     * @param  {ReadableStream} stream The stream to play.
-     * @return {void}
-     */
-    playStream(stream: ReadableStream): void;
     producer: any;
     streamFinished: boolean;
     originStream: ReadableStream<any>;
