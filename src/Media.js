@@ -339,7 +339,9 @@ class MediaPlayer extends Media {
       this.started = false;
       this.track = new MediaStreamTrack({ kind: "audio" });
       this.emit("finish");
-      res();
+      this.once("finish", () => {
+        res();
+      });
     });
   }
   sleep(ms) {
