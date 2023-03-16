@@ -148,6 +148,8 @@ class MediaPlayer extends Media {
     this.lastPacket = null;
     this.paused = false;
     this.ffmpegKilled = false;
+    this.ready = true;
+    this.volCache = null;
 
     this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: 1 });
     this.volumeTransformer.pipe(this.ffmpeg.stdin);
@@ -225,29 +227,22 @@ class MediaPlayer extends Media {
     if (destroy) this.track = new MediaStreamTrack({ kind: "audio" }); // clean up the current data and streams
     this.paused = false;
     if (f) {
+      this.ready = false;
       // prevent EPIPE errors
       this.originStream.unpipe(this.fpcm.stdin);
-      const vol = this.volumeTransformer.volume;
+      this.volCache = this.volumeTransformer.volume;
       this.volumeTransformer.unpipe(this.ffmpeg.stdin);
       this.volumeTransformer.destroy();
 
       this.ffmpegKilled = true;
       this.ffmpeg.kill();
       this.fpcm.kill();
-      this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
-        ...this.createFfmpegArgs()
-      ]);
-      await this.sleep(1000);
-
-      this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: vol });
-      this.volumeTransformer.pipe(this.ffmpeg.stdin);
     }
     this.currTime = "00:00:00";
 
     this.packets = [];
     this.intervals = [];
     this.started = false
-    if (f) this.#setupFmpeg();
   }
   /**
    * @description Destroys all streams and frees the port.
@@ -325,10 +320,10 @@ class MediaPlayer extends Media {
       this.fpcm.kill();
       this.pcm.destroy();
       this.ffmpeg.kill();
+      await this.sleep(1000);
       this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
         ...this.createFfmpegArgs()
       ]);
-      await this.sleep(1000);
       this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: vol });
       this.volumeTransformer.pipe(this.ffmpeg.stdin);
       this.paused = false;
@@ -388,6 +383,17 @@ class MediaPlayer extends Media {
       this.streamFinished = true;
     });
 
+    if (!this.ready) {
+      this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
+        ...this.createFfmpegArgs()
+      ]);
+      //await this.sleep(1000);
+
+      this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: this.volCache || 1 });
+      this.volumeTransformer.pipe(this.ffmpeg.stdin);
+      this.ready = true;
+    }
+
     const fpcm = require("child_process").spawn(ffmpeg, [
       "-re", "-i", "-",
       "-analyzeduration", "0",
@@ -412,12 +418,10 @@ class MediaPlayer extends Media {
     await this.sleep(1000); // prevent bug with no music after 3rd song
     this.processPacket("FINISHPACKET");
     this.originStream.destroy();
+    this.ready = false;
     this.ffmpeg.kill();
     this.fpcm.kill("SIGINT");
     this.currTime = "00:00:00";
-    this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
-      ...this.createFfmpegArgs()
-    ]);
   }
   #setupFmpeg() {
     this.fpcm.on("exit", async (_c, s) => {
@@ -433,13 +437,10 @@ class MediaPlayer extends Media {
       console.log("err", Buffer.from(chunk).toString());
     });
     this.ffmpeg.stdout.on("data", (chunk) => {
-      console.log("OUT", Buffer.from(chunk().toString()));
+      console.log("OUT", Buffer.from(chunk.toString()));
     });
     this.ffmpeg.stdout.on("end", () => {
       console.log("finished");
-    });
-    this.ffmpeg.stdout.on("readable", () => {
-      console.log("readable")
     });
   }
 }
