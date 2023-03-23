@@ -432,15 +432,14 @@ class MediaPlayer extends Media {
       if (e.code == "EPIPE") return;
       console.log("Ffmpeg error: ", e);
     });
-    if (!this.logs) return;
     this.ffmpeg.stderr.on("data", (chunk) => {
-      console.log("err", Buffer.from(chunk).toString());
+      if (this.logs) console.log("err", Buffer.from(chunk).toString());
     });
     this.ffmpeg.stdout.on("data", (chunk) => {
-      console.log("OUT", Buffer.from(chunk.toString()));
+      if (this.logs) console.log("OUT", Buffer.from(chunk.toString()));
     });
     this.ffmpeg.stdout.on("end", () => {
-      console.log("finished");
+      if (this.logs) console.log("finished");
     });
   }
 }
