@@ -53,7 +53,7 @@ class Media {
   }
 
   ffmpegArgs(port) {
-    return ("-re " + this.inputFormat + "-i - -map 0:a -b:a 48k -maxrate 48k -acodec libopus -ar 48000 -ac 2 -f rtp rtp://127.0.0.1:" + port).split(" ");
+    return ("-re " + this.inputFormat + "-i - -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 4 -map 0:a -b:a 48k -maxrate 48k -acodec libopus -ar 48000 -ac 2 -f rtp rtp://127.0.0.1:" + port).split(" ");
   }
   /**
    * Returns an array of arguments that can be passed to ffmpeg
