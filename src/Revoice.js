@@ -3,6 +3,10 @@ const Signaling = require("./Signaling.js");
 const EventEmitter = require("events");
 const { Device, useSdesMid, RTCRtpCodecParameters } = require("msc-node");
 
+/**
+ * @class
+ * @classdesc Operates media sources and users in voice channels
+ */
 class VoiceConnection extends EventEmitter {
   constructor(channelId, voice, opts) {
     super();
@@ -27,9 +31,21 @@ class VoiceConnection extends EventEmitter {
     this.emit("state", state);
   }
 
+  /**
+   * @description Get all the users associated with this voice connection
+   *
+   * @return {User[]} An array containing all the User objects
+   */
   getUsers() {
     return this.signaling.users;
   }
+
+  /**
+   * @description Check if a user is connected to this voice channel
+   *
+   * @param  {string} userId The id of the user
+   * @return {boolean}        Wether the user is in the voice channel
+   */
   isConnected(userId) {
     return this.signaling.isConnected(userId);
   }
@@ -104,6 +120,20 @@ class VoiceConnection extends EventEmitter {
     old.connectedTo = null;
     this.voice.users.set(user.id, old);
   }
+
+  /**
+   * @description Attach a Media object to this connection
+   *
+   * @example
+   * const connection = voice.getVoiceConnection("someChannelId");
+   * const player = new MediaPlayer();
+   * connection.play(player);
+   *
+   * player.playFile("./audio.mp3");
+   *
+   * @param  {(Media|MediaPlayer)} media The media object that should be attached
+   * @return {void}
+   */
   async play(media) {
     this.updateState(((!media.isMediaPlayer) ? Revoice.State.UNKNOWN : Revoice.State.BUFFERING));
 
@@ -152,6 +182,12 @@ class VoiceConnection extends EventEmitter {
       res();
     });
   }
+
+  /**
+   * @description Leave the voice channel
+   * @async
+   * @return {void}
+   */
   async leave() {
     this.users.forEach(u => this.resetUser(u))
     this.updateState(Revoice.State.OFFLINE);
@@ -161,6 +197,11 @@ class VoiceConnection extends EventEmitter {
   }
 }
 
+/**
+ * @class
+ * @classdesc The main class used to join channels and initiate voice connections
+ * @augments EventEmitter
+ */
 class Revoice extends EventEmitter {
   static createDevice() {
     return new Device({
@@ -195,6 +236,13 @@ class Revoice extends EventEmitter {
     NOT_A_VC: "novc", // joining failed because the bot is already connected to the channel
     VC_ERROR: "vce", // there was an error fetching data about the voice channel
   }
+
+  /**
+   * @constructor
+   *
+   * @param  {string} token The authentication token of the bot you want to use
+   * @return {Revoice}
+   */
   constructor(token) {
     super();
     this.api = new API({ authentication: { revolt: token }});
@@ -220,6 +268,18 @@ class Revoice extends EventEmitter {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
   }
 
+
+  /**
+   * @typedef UserData
+   * @property {User} user The Revoice user object associated with the user
+   * @property {VoiceConnection} connection The voice connection that is connected to the user
+   */
+  /**
+   * @description Retrieve the user object
+   *
+   * @param  {string} id The id of the user
+   * @return {UserData} An object containing the Revoice user object and the voice connection, the user is in.
+   */
   getUser(id) {
     if (!this.users.has(id)) return false; // no data about the user in cache
     const user = this.users.get(id);
@@ -232,6 +292,19 @@ class Revoice extends EventEmitter {
     return this.users.has(id);
   }
 
+  /**
+   * @description Join a specified channel
+   * @example
+   * voice.join("channel", 60).then(connection => { // leave after 60 seconds of inactivity
+   *   const player = new MediaPlayer();
+   *   connection.play(player);
+   *   player.playFile("audio.mp3");
+   * });
+   *
+   * @param  {string} channelId        The id of the voice channel you want the bot to join
+   * @param  {(false|number)} leaveIfEmpty=false Specifies the amount of time in sconds, after which the bot leaves an empty voice channel. If this is set to `false`, the bot will stay unless told to leave
+   * @return {Promise<VoiceConnection>} A promise containing the resulting VoiceConnection for this channel.
+   */
   join(channelId, leaveIfEmpty=false) { // leaveIfEmpty == amount of seconds the bot will wait before leaving if the room is empty
     return new Promise((res, rej) => {
       this.api.get("/channels/" + channelId).then(data => {
@@ -260,6 +333,13 @@ class Revoice extends EventEmitter {
       });
     });
   }
+
+  /**
+   * @description Retrieve the VoiceConnection object for a specified voice channel
+   *
+   * @param  {string} channelId The id of the voice channel
+   * @return {VoiceConnection}           The voice connection object
+   */
   getVoiceConnection(channelId) {
     return this.connections.get(channelId);
   }

@@ -62,10 +62,12 @@ connection.on("join", () => {
 });
 ```
 
-### Rejoice for Revoice!<!--lol-->
+<!--### Rejoice for Revoice!<!--lol-->
+### Documentation
 
-## API
+For the documentation, please have a look at the pages deployment: https://shadowlp174.github.io/revoice.js/docs
 
+<!--
 ### Revoice Client
 
 #### Properties/Methods:
@@ -156,3 +158,4 @@ _**This class should only be used if you want to implement your own MediaPlayer 
 #### Signaling
 
 WIP
+-->

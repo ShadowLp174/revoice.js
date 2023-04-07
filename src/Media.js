@@ -81,7 +81,7 @@ class Media {
   playFile(path) {
     if (!path) throw "You must specify a file to play!";
     const stream = fs.createReadStream(path);
-    stream.pipe(this.ffmpeg.stdin);
+    this.playStream(stream);
   }
   /**
    * Writes a chunk of data into the ffmpeg process.
@@ -372,6 +372,7 @@ class MediaPlayer extends Media {
 
   /**
    * @description Play an audio read stream to the media track.
+   * @override
    *
    * @param  {ReadableStream} stream The stream to play.
    * @return {void}

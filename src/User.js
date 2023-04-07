@@ -1,13 +1,15 @@
 const EventEmitter = require("events");
 
-class User {
+/**
+ * @class
+ * @classdesc A user object storing data about a user associated with revoice
+ */
+class User extends EventEmitter {
   constructor(id, api) {
     this.id = id;
     this.api = api;
     this.connected = true; // gets changed from outside
     this.connectedTo = null; // same as connected
-
-    this.emitter = new EventEmitter();
 
     this.api.get("/users/" + id).then(res => {
       this.username = res.username;
@@ -21,17 +23,6 @@ class User {
 
     return this;
   }
-  on(event, cb) {
-    return this.emitter.on(event, cb);
-  }
-  once(event, cb) {
-    return this.emitter.once(event, cb);
-  }
-  emit(event, data) {
-    return this.emitter.emit(event, data);
-  }
-
-
 }
 
 module.exports = User;
