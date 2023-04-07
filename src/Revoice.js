@@ -201,7 +201,11 @@ class VoiceConnection extends EventEmitter {
  * @property {String} email The email of the account.
  * @property {Stirng} password The password of the account.
  */
-
+/**
+ * @class
+ * @classdesc The main class used to join channels and initiate voice connections
+ * @augments EventEmitter
+ */
 class Revoice extends EventEmitter {
   static createDevice() {
     return new Device({
