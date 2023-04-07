@@ -65,6 +65,7 @@ class VoiceConnection extends EventEmitter {
       this.initLeave();
       signaling.users.forEach((user) => {
         this.voice.users.set(user.id, user);
+        this.users.push(user);
       });
     });
     signaling.on("userjoin", (user) => {
@@ -114,11 +115,7 @@ class VoiceConnection extends EventEmitter {
     this.emit("join");
   }
   resetUser(user) {
-    console.log("reset", user);
-    const old = this.voice.users.get(user.id);
-    old.connected = false;
-    old.connectedTo = null;
-    this.voice.users.set(user.id, old);
+    this.emit("userLeave", user);
   }
 
   /**
@@ -197,11 +194,14 @@ class VoiceConnection extends EventEmitter {
   }
 }
 
+
 /**
- * @class
- * @classdesc The main class used to join channels and initiate voice connections
- * @augments EventEmitter
+ * Login information required, when you want to use a user account and not a bot. Please note that an account with MFA will not work.
+ * @typedef {Object} Login
+ * @property {String} email The email of the account.
+ * @property {Stirng} password The password of the account.
  */
+
 class Revoice extends EventEmitter {
   static createDevice() {
     return new Device({
@@ -215,7 +215,7 @@ class Revoice extends EventEmitter {
           new RTCRtpCodecParameters({
             mimeType: "audio/opus",
             clockRate: 48000,
-            preferredPayloadType: 100,
+            payloadType: 100,
             channels: 2
           })
         ]
@@ -238,14 +238,16 @@ class Revoice extends EventEmitter {
   }
 
   /**
-   * @constructor
+   * @description Initiate a new Revoice instance
    *
-   * @param  {string} token The authentication token of the bot you want to use
+   * @param  {(Login|string)} loginData The way to login. If you're using a bot use your token, otherwise specify an email and password.
    * @return {Revoice}
    */
-  constructor(token) {
+  constructor(loginData) {
     super();
-    this.api = new API({ authentication: { revolt: token }});
+    this.session = null;
+    this.login(loginData);
+
     this.signals = new Map();
     this.signaling = new Signaling(this.api);
 
@@ -259,6 +261,22 @@ class Revoice extends EventEmitter {
     this.state = Revoice.State.OFFLINE;
 
     return this;
+  }
+  async login(data) {
+    if (!data.email) return this.api = new API({ authentication: { revolt: data }});
+
+    this.api = new API();
+    const d = await this.api.post("/auth/session/login", data);
+    if (d.result != "Success") throw "MFA not implemented or login not successfull!";
+    this.session = d;
+    this.connect();
+  }
+  async connect() {
+    this.api = new API({
+      authentication: {
+        revolt: this.session
+      }
+    });
   }
   updateState(state) {
     this.state = state;
@@ -323,6 +341,13 @@ class Revoice extends EventEmitter {
         });
         connection.on("autoleave", () => {
           this.connections.delete(channelId);
+        });
+        connection.on("userLeave", (u) => {
+          if (!this.users.has(u.id)) return; // is leaving anyway
+          const user = this.users.get(u.id);
+          user.connected = false;
+          user.connectedTo = null;
+          this.users.set(u.id, user);
         });
         connection.updateState(Revoice.State.JOINING);
         this.connections.set(channelId, connection);

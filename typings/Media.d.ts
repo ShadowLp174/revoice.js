@@ -23,7 +23,7 @@ export class Media {
     logs: boolean;
     playing: boolean;
     isMedia: boolean;
-    ffmpeg: import("child_process").ChildProcessWithoutNullStreams;
+    ffmpeg: import("child_process").ChildProcess;
     on(event: any, cb: any): string;
     once(event: any, cb: any): string;
     ffmpegArgs(port: any): string[];
@@ -93,6 +93,8 @@ export class MediaPlayer extends Media {
     lastPacket: number;
     paused: boolean;
     ffmpegKilled: boolean;
+    ready: boolean;
+    volCache: number;
     volumeTransformer: prism.VolumeTransformer;
     on(event: any, cb: any): EventEmitter;
     once(event: any, cb: any): EventEmitter;
@@ -159,17 +161,10 @@ export class MediaPlayer extends Media {
     get transport(): any;
     sendTransport: any;
     processPacket(packet: any): void;
-    /**
-     * @description Play an audio read stream to the media track.
-     *
-     * @param  {ReadableStream} stream The stream to play.
-     * @return {void}
-     */
-    playStream(stream: ReadableStream): void;
     producer: any;
     streamFinished: boolean;
     originStream: ReadableStream<any>;
-    fpcm: import("child_process").ChildProcessWithoutNullStreams;
+    fpcm: import("child_process").ChildProcess;
     pcm: import("stream").Readable;
     #private;
 }
