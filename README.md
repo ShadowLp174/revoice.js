@@ -63,7 +63,7 @@ connection.on("join", () => {
 ```
 
 <!--### Rejoice for Revoice!<!--lol-->
-### Documentation
+## Documentation
 
 For the documentation, please have a look at the pages deployment: https://shadowlp174.github.io/revoice.js/docs
 

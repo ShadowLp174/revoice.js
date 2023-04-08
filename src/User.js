@@ -6,6 +6,7 @@ const EventEmitter = require("events");
  */
 class User extends EventEmitter {
   constructor(id, api) {
+    super();
     this.id = id;
     this.api = api;
     this.connected = true; // gets changed from outside
