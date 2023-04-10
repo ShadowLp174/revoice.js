@@ -66,8 +66,8 @@ class VoiceConnection extends EventEmitter {
       signaling.users.forEach((user) => {
         this.voice.users.set(user.id, user);
         this.users.push(user);
-        this.emit("roomfetched");
       });
+      this.emit("roomfetched");
     });
     signaling.on("userjoin", (user) => {
       this.voice.users.set(user.id, user);
