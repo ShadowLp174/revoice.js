@@ -397,6 +397,9 @@ class MediaPlayer extends Media {
 
     const fpcm = require("child_process").spawn(ffmpeg, [
       "-re", "-i", "-",
+      "-reconnect", "1",
+      "-reconnect_streamed", "1",
+      "-reconnect_delay_max", "4",
       "-analyzeduration", "0",
       "-loglevel", "0",
       "-f", "s16le",

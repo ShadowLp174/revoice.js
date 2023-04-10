@@ -1,6 +1,6 @@
 {
   "name": "revoice.js",
-  "version": "0.1.7531",
+  "version": "0.1.7532",
   "description": "A voice module for Revolt",
   "main": "index.js",
   "typings": "./typings/index.d.ts",
