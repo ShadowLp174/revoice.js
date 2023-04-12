@@ -268,6 +268,7 @@ class MediaPlayer extends Media {
   finished() {
     this.playing = false;
     this.paused = false;
+    this.ffmpeg.kill();
     this.disconnect();
     this.emit("finish");
   }
@@ -423,7 +424,6 @@ class MediaPlayer extends Media {
     this.processPacket("FINISHPACKET");
     this.originStream.destroy();
     this.ready = false;
-    this.ffmpeg.kill();
     this.fpcm.kill("SIGINT");
     this.currTime = "00:00:00";
   }
