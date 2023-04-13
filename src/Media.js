@@ -235,8 +235,9 @@ class MediaPlayer extends Media {
       this.volumeTransformer.destroy();
 
       this.ffmpegKilled = true;
-      this.ffmpeg.kill();
-      this.fpcm.kill();
+      // childProcess.exitCode indicates the exit code of the process; returns `null` if the process is still running
+      if (!this.ffmpeg.exitCode) this.ffmpeg.kill();
+      if (!this.fpcm.exitCode) this.fpcm.kill();
     }
     this.currTime = "00:00:00";
 
@@ -268,6 +269,7 @@ class MediaPlayer extends Media {
   finished() {
     this.playing = false;
     this.paused = false;
+    this.ready = false;
     this.ffmpeg.kill();
     this.disconnect();
     this.emit("finish");
@@ -318,16 +320,11 @@ class MediaPlayer extends Media {
       this.volumeTransformer.unpipe(this.ffmpeg.stdin);
       this.volumeTransformer.destroy();
 
-      this.fpcm.kill();
+      if (!this.fpcm.exitCode) this.fpcm.kill();
       this.pcm.destroy();
-      this.ffmpeg.kill();
+      if (!this.ffmpeg.exitCode) this.ffmpeg.kill();
       this.ready = false;
       await this.sleep(1000);
-      /*this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
-        ...this.createFfmpegArgs()
-      ]);
-      this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: vol });
-      this.volumeTransformer.pipe(this.ffmpeg.stdin);*/
       this.paused = false;
       this.playbackPaused = false;
 
@@ -412,6 +409,7 @@ class MediaPlayer extends Media {
     const pcm = fpcm.stdout;
     this.fpcm = fpcm;
     this.pcm = pcm;
+    this.ffmpegKilled = false;
 
     pcm.on("data", (c)=>this.processPacket(c));
 
@@ -424,8 +422,6 @@ class MediaPlayer extends Media {
     await this.sleep(1000); // prevent bug with no music after 3rd song
     this.processPacket("FINISHPACKET");
     this.originStream.destroy();
-    this.ready = false;
-    this.fpcm.kill("SIGINT");
     this.currTime = "00:00:00";
   }
   #setupFmpeg() {
