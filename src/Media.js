@@ -314,19 +314,20 @@ class MediaPlayer extends Media {
 
       // prevent EPIPE errors
       this.originStream.unpipe(this.fpcm.stdin);
-      const vol = this.volumeTransformer.volume;
+      this.volCache = this.volumeTransformer.volume;
       this.volumeTransformer.unpipe(this.ffmpeg.stdin);
       this.volumeTransformer.destroy();
 
       this.fpcm.kill();
       this.pcm.destroy();
       this.ffmpeg.kill();
+      this.ready = false;
       await this.sleep(1000);
-      this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
+      /*this.ffmpeg = require("child_process").spawn(ffmpeg, [ // set up new ffmpeg instance
         ...this.createFfmpegArgs()
       ]);
       this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: vol });
-      this.volumeTransformer.pipe(this.ffmpeg.stdin);
+      this.volumeTransformer.pipe(this.ffmpeg.stdin);*/
       this.paused = false;
       this.playbackPaused = false;
 
