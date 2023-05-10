@@ -331,7 +331,7 @@ class Revoice extends EventEmitter {
   join(channelId, leaveIfEmpty=false) { // leaveIfEmpty == amount of seconds the bot will wait before leaving if the room is empty
     return new Promise((res, rej) => {
       this.api.get("/channels/" + channelId).then(data => {
-        if (data.channel_type != "VoiceChannel") return rej(Revoice.Error.NOT_A_VC);
+        if (data.channel_type != "VoiceChannel" && data.channel_type != "Group") return rej(Revoice.Error.NOT_A_VC);
         if (this.devices.has(channelId)) {
           return rej(Revoice.Error.ALREADY_CONNECTED);
         }
