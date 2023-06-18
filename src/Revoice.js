@@ -200,7 +200,12 @@ class VoiceConnection extends EventEmitter {
  * Login information required, when you want to use a user account and not a bot. Please note that an account with MFA will not work.
  * @typedef {Object} Login
  * @property {String} email The email of the account.
- * @property {Stirng} password The password of the account.
+ * @property {String} password The password of the account.
+ */
+/**
+ * revolt-api configuration object. May be used for self-hosted revolt instances. @see {@link https://github.com/insertish/oapi#example} The last example for further information.
+ * @typedef {Object} APIConfig
+ * @property {String} baseURL The base url of the api of your revolt instance
  */
 /**
  * @class
@@ -246,12 +251,13 @@ class Revoice extends EventEmitter {
    * @description Initiate a new Revoice instance
    *
    * @param  {(Login|string)} loginData The way to login. If you're using a bot use your token, otherwise specify an email and password.
+   * @param {(APIConfig)} [apiConfig={}] A configuration object for revolt-api. @see {@link https://github.com/insertish/oapi#example} The last example for further information
    * @return {Revoice}
    */
-  constructor(loginData) {
+  constructor(loginData, apiConfig={}) {
     super();
     this.session = null;
-    this.login(loginData);
+    this.login(loginData, apiConfig);
 
     this.signals = new Map();
     this.signaling = new Signaling(this.api);
@@ -267,17 +273,18 @@ class Revoice extends EventEmitter {
 
     return this;
   }
-  async login(data) {
-    if (!data.email) return this.api = new API({ authentication: { revolt: data }});
+  async login(data, config) {
+    if (!data.email) return this.api = new API({ ...config, authentication: { revolt: data } });
 
     this.api = new API();
     const d = await this.api.post("/auth/session/login", data);
     if (d.result != "Success") throw "MFA not implemented or login not successfull!";
     this.session = d;
-    this.connect();
+    this.connect(config);
   }
-  async connect() {
+  async connect(config) {
     this.api = new API({
+      ...config,
       authentication: {
         revolt: this.session
       }

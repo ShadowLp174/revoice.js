@@ -62,6 +62,11 @@ connection.on("join", () => {
 });
 ```
 
+# Connect to self-hosted instances
+
+You can pass the configuration data for revolt-api and thus connect it to a self-hosted instance.
+For the data you can pass, see [oapi](https://github.com/insertish/oapi#example)
+
 <!--### Rejoice for Revoice!<!--lol-->
 ## Documentation
 
