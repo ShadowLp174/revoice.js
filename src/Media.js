@@ -32,6 +32,7 @@ class Media {
     this.logs = logs;
     this.playing = false;
     this.isMedia = true;
+    this.readAtNative = true;
 
     this.ffmpeg = require("child_process").spawn(ffmpeg, this.ffmpegArgs(port));
     if (logs) {
@@ -53,7 +54,7 @@ class Media {
   }
 
   ffmpegArgs(port) {
-    return ("-re " + this.inputFormat + "-i - -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 4 -map 0:a -b:a 48k -maxrate 48k -acodec libopus -ar 48000 -ac 2 -f rtp rtp://127.0.0.1:" + port).split(" ");
+    return (((this.readAtNative) ? "-re " : "") + this.inputFormat + "-i - -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 4 -map 0:a -b:a 48k -maxrate 48k -acodec libopus -ar 48000 -ac 2 -f rtp rtp://127.0.0.1:" + port).split(" ");
   }
   /**
    * Returns an array of arguments that can be passed to ffmpeg
@@ -164,6 +165,17 @@ class MediaPlayer extends Media {
   }
   emit(event, data) {
     return this.emitter.emit(event, data);
+  }
+
+  /**
+   * setReadNative
+   * @description Change if ffmpeg should read the input at its native frame rate (-re flag). Set this to `false` if your input data is already at native frame rate to prevent packet loss.
+   *
+   * @param  {boolean} bool=true true: read at native frame rate; false: process input as fast as possible
+   * @return {void}
+   */
+  setReadNative(bool=true) {
+    this.readAtNative = bool;
   }
 
   static timestampToSeconds(timestamp="00:00:00", ceilMinutes=false) {
@@ -395,7 +407,7 @@ class MediaPlayer extends Media {
     }
 
     const fpcm = require("child_process").spawn(ffmpeg, [
-      "-re", "-i", "-",
+      ((this.readAtNative) ? "-re" : ""), "-i", "-",
       "-reconnect", "1",
       "-reconnect_streamed", "1",
       "-reconnect_delay_max", "4",
