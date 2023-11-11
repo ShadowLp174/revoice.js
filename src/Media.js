@@ -124,7 +124,7 @@ class Media {
  * @description An advanced version of the Media class. It also includes media controls like pausing.
  *
  * @property {number} seconds - The amount of seconds passed during playback. Extracted from ffmpeg
- * @property {string} timestamp - The current timestamp as given by ffmpeg. "hh:mm:ss"
+ * @property {string} currTimestamp - The current timestamp as given by ffmpeg. "hh:mm:ss"
  */
 class MediaPlayer extends Media {
   /**
