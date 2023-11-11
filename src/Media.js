@@ -122,6 +122,9 @@ class Media {
  * @class
  * @augments Media
  * @description An advanced version of the Media class. It also includes media controls like pausing.
+ *
+ * @property {number} seconds - The amount of seconds passed during playback. Extracted from ffmpeg
+ * @property {string} timestamp - The current timestamp as given by ffmpeg. "hh:mm:ss"
  */
 class MediaPlayer extends Media {
   /**
@@ -151,6 +154,9 @@ class MediaPlayer extends Media {
     this.ffmpegKilled = false;
     this.ready = true;
     this.volCache = null;
+
+    this.seconds = 0;
+    this.currTimestamp = "00:00:00";
 
     this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: 1 });
     this.volumeTransformer.pipe(this.ffmpeg.stdin);
@@ -437,6 +443,9 @@ class MediaPlayer extends Media {
     this.currTime = "00:00:00";
   }
   #setupFmpeg() {
+    this.seconds = 0;
+    this.currTimestamp = "00:00:00";
+
     this.fpcm.on("exit", async (_c, s) => {
       if (s == "SIGTERM" || this.ffmpegKilled) return this.ffmpegKilled = false; // killed intentionally
       this.#ffmpegFinished();
@@ -446,7 +455,14 @@ class MediaPlayer extends Media {
       console.log("Ffmpeg error: ", e);
     });
     this.ffmpeg.stderr.on("data", (chunk) => {
-      if (this.logs) console.log("err", Buffer.from(chunk).toString());
+      const output = Buffer.from(chunk).toString();
+      if (this.logs) console.log("err", output);
+
+      if (!output.includes("time=")) return;
+      var time = output.slice(output.indexOf("time=") + "time=".length, output.indexOf("time=") + "time=".length + 11)
+      this.currTimestamp = time;
+      time = MediaPlayer.timestampToSeconds(time);
+      this.seconds = time;
     });
     this.ffmpeg.stdout.on("data", (chunk) => {
       if (this.logs) console.log("OUT", Buffer.from(chunk.toString()));
