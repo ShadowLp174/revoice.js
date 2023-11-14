@@ -430,6 +430,7 @@ class MediaPlayer extends Media {
     this.ffmpegKilled = false;
 
     pcm.on("data", (c)=>this.processPacket(c));
+    pcm.once("data", () => this.emit("startPlay"));
 
     // ffmpeg stuff
     this.#setupFmpeg();
