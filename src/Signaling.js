@@ -15,6 +15,9 @@ class Signaling {
     this.users = [];
     this.roomEmpty = null;
 
+    this.kaTimeout = null; // keep alive vars
+    this.kaTime = 10000;
+
     return this;
   }
   emit(event, cb) {
@@ -47,6 +50,15 @@ class Signaling {
     this.connect(this.channelId);
   }
 
+  resetKeepAlive() {
+    if (this.kaTimeout) clearTimeout(this.kaTimeout);
+
+    this.kaTimeout = setTimeout(() => {
+      this.ws.send(JSON.stringify({ type: "Ping" }));
+      this.resetKeepAlive();
+    }, this.kaTime);
+  }
+
   initWebSocket(data) {
     this.ws = new WebSocket("wss://vortex.revolt.chat"); // might need to whitelist this in your antivirus
     this.ws.on("open", () => {
@@ -56,17 +68,20 @@ class Signaling {
         roomId: this.channelId
       }});
       this.ws.send(msg);
+      this.resetKeepAlive();
     });
     this.ws.on("close", (e) => {
       if (e === 1000) return; // don't reconnect when websocket is closed intentionally
-      console.log("WebSocket Closed: ", e);
+      console.log("Websocket closed: ", e);
+      clearInterval(this.kaTimeout);
+      this.kaTimeout = null;
       // TODO: Reconnect
       setTimeout(() => {
         this.reconnect();
       }, this.reconnectTimeout);
     });
     this.ws.on("error", (e) => {
-      console.log("Signaling error: ", e);
+      console.log("Signaling websocket error: ", e);
     });
     this.ws.on("message", (msg) => {
       const data = JSON.parse(Buffer.from(msg).toString()); // convert the received buffer to an object
@@ -76,11 +91,13 @@ class Signaling {
   processWS(data) { // data == parsed websocket message
     switch(data.type) {
       case "InitializeTransports":
-        if (!this.reconnecting)  this.eventemitter.emit("initTransports", data);
+        this.eventemitter.emit("initTransports", data);
         this.fetchRoomInfo().then(() => {
           this.roomEmpty = (this.users.length == 1);
           this.emit("roomfetched");
         });
+
+        this.resetKeepAlive();
       break;
       case "Authenticate":
         // continue in signaling process
@@ -96,13 +113,16 @@ class Signaling {
         this.ws.send(JSON.stringify(request));
       break;
       case "ConnectTransport":
-        if (!this.reconnecting)  this.eventemitter.emit("ConnectTransport", data);
+        this.eventemitter.emit("ConnectTransport", data);
+        this.resetKeepAlive();
       break;
       case "StartProduce":
         this.eventemitter.emit("StartProduce", data);
+        this.resetKeepAlive();
       break;
       case "StopProduce":
         this.eventemitter.emit("StopProduce", data);
+        this.resetKeepAlive();
       break;
       case "UserJoined":
         const user = new User(data.data.id, this.client);
@@ -112,15 +132,18 @@ class Signaling {
           this.addUser(user);
           this.emit("userjoin", user);
         });
+        this.resetKeepAlive();
       break;
       case "RoomInfo":
         this.emit("roominfo", data);
+        this.resetKeepAlive();
       break;
       case "UserLeft":
         const id = data.data.id;
         const removed = this.removeUser(id);
         this.roomEmpty = (this.users.length == 1);
         this.emit("userleave", removed);
+        this.resetKeepAlive();
       default:
         // events like startProduce or UserJoined; will be implemented later
         this.eventemitter.emit("data", data);

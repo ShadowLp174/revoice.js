@@ -367,7 +367,11 @@ class MediaPlayer extends Media {
     console.log("This should not be done.", t);
   }
   set transport(t) {
+    this.sendTransport?.close();
     this.sendTransport = t;
+    if (!this.track) return;
+    this.track = new MediaStreamTrack({ kind: "audio" });
+    this.sendTransport.produce({ track: this.track, appData: { type: "audio" } })
   }
   get transport() {
     return this.sendTransport;

@@ -2,7 +2,7 @@
     // Change this to match your project
     "include": [
         "src/**/*",
-        "index.ts"
+        "index.js"
     ],
     "exclude": ["/node_modules/*"],
     "compilerOptions": {

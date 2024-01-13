@@ -1,6 +1,6 @@
 {
   "name": "revoice.js",
-  "version": "0.1.7541",
+  "version": "0.1.7542",
   "description": "A voice module for Revolt",
   "main": "index.js",
   "typings": "./typings/index.d.ts",
@@ -43,7 +43,7 @@
     "prism-media": "^1.3.4",
     "revolt-api": "^0.5.5",
     "taffydb": "^2.7.3",
-    "ws": "^8.8.1"
+    "ws": "^8.16.0"
   },
   "devDependencies": {
     "@types/node": "^18.11.18",

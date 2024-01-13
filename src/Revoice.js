@@ -23,6 +23,8 @@ class VoiceConnection extends EventEmitter {
     this.leaveTimeout = opts.leaveOnEmpty;
     this.leaving; // the actual timeout cancellable
 
+    this.initialConnect = true;
+
     this.media = null;
   }
 
@@ -111,6 +113,12 @@ class VoiceConnection extends EventEmitter {
         callback({ cid });
       });
     });
+
+    if (!this.initialConnect && this.media) {
+      this.media.transport = this.sendTransport;
+    }
+
+    this.initialConnect = false;
 
     this.updateState(Revoice.State.IDLE);
     this.emit("join");
