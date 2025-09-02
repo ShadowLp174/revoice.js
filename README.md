@@ -23,6 +23,9 @@ Just execute `npm install revoice.js` to install the package, have fun! :)
 
 ## Usage
 
+> [!WARNING]
+> For Node versions 21.1.X+ it is important to disable the navigator API. Unless the API is disabled, joining a voice channel will result in a "device not supported" error. It can be disabled with the `--no-experimental-global-navigator` flag when starting the node process.
+
 TL;DR: You initiate a client, you join a voice channel and then you play media.
 
 Please note that unlike on Discord bots, Revolt bots are able to join multiple voice channels at once. Thus a single bot is able to be in every voice channel it has access to. I have no idea about the limitations.
