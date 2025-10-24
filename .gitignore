@@ -2,3 +2,5 @@ node_modules
 assets
 config.json
 docs
+src/test.mp3
+src/test.wav
