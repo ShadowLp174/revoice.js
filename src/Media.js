@@ -1,14 +1,13 @@
-/**
- * @class
- * @classdesc Basic class to process audio streams
- */
-
 const { AudioSource, LocalAudioTrack, TrackPublishOptions, TrackSource, AudioFrame } = require("@livekit/rtc-node");
 const ffmpeg = require("fluent-ffmpeg");
 const fPath = require("ffmpeg-static");
 const { EventEmitter } = require("events");
 const prism = require("prism-media");
 
+/**
+ * @class
+ * @classdesc Basic class to process audio streams. As of 5a2fd7bcde9819c927157a965cfafdb8661f3e4e this doesn't have any functionality anymore and acts more like an interface.
+ */
 class Media extends EventEmitter {
   SAMPLE_RATE = 48000;
   CHANNELS = 2;
@@ -34,7 +33,20 @@ class Media extends EventEmitter {
 	}
 }
 
+/**
+ * @class
+ * @augments Media
+ * @description An advanced version of the Media class. It also includes media controls like pausing and volume adjustment.
+ *
+ * @property {number} seconds - The amount of seconds passed during playback.
+ * @property {string} currTimestamp - The current timestamp in ffmpeg format `hh:mm:ss`.
+ */
 class MediaPlayer extends Media {
+	/**
+	 * @description Initiates the MediaPlayer instance.
+	 *
+	 * @return {MediaPlayer}            The new instance.
+	 */
   constructor() {
     super();
 

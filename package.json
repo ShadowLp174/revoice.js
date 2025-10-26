@@ -1,6 +1,6 @@
 {
   "name": "revoice.js",
-  "version": "0.2.14",
+  "version": "0.2.163",
   "description": "A voice module for Revolt",
   "main": "index.js",
   "typings": "./typings/index.d.ts",
@@ -12,8 +12,11 @@
   "keywords": [
     "voice",
     "sound",
+		"bot",
     "revolt",
     "revolt.js",
+		"stoat",
+		"stoat.chat",
     "ffmpeg",
     "streams",
     "voice channels"

@@ -1,21 +1,21 @@
-# Revoice.js - A Voice Module for Revolt
+# Revoice.js - A Voice Module for Stoat (Revolt)
 
-This package is still in developement and lacks many features.
+A Node.js package allowing bots (or selfbots) to connect to voice channels on the Discord-alternative Stoat, formerly Revolt.
 
-You still are able to play sound to a voice channel. Other features like channel info will follow.
+#### Features:
 
-## **Developement paused because of vortex rewrite**
+- Audio Playback
+- Pausing/Resuming Playback
+- Adjusting volume
+- User Events (joining/leaving)
 
-Vortex are the voice servers behind revolt and they are currently being rewritten so adding new features now doesn't make any sense. User stuff, play/pause, audio works but without proper docs. I'm sorry about the docs but they will be updated in the upcoming rewrite of the library after the vortex update.
+This package is still in development. If you need a certain feature currently not implemented, please open an issue and let me know about it. I will see what I can do :)
 
-**TODO**:
+## Livekit Update
 
-- [X] Play/Pause for the media class (help apreciated ;))
-- [X] Non-voice events like UserJoined and roominfo
-- [ ] Audio reception
-- [ ] Error Handling; Right now, you have to take care of things like stopping the music if you start to play another song while one is playing
-
-*Disclamer: I might have forgotten some things on the list and thus it might be extended. Feel free to open issues to suggest new features :)*
+Stoat, formerly Revolt, has updated to a new voice system called Livekit. Revoice.js has been updated to support this and is a lot more stable now.  
+The rewrite was made with backwards-compatibility in mind so any programs using Revoice written before the switch should still work after updating to the newest Revoice version. However, minor issues may arise (such as `media.playbackPaused` being removed in favour of `media.paused`).  
+To connect to Stoat instances still using Vortex, the old `Revoice` and `MediaPlayer` are still accessible by importing them through `require("revoice.js").legacy`.
 
 ## Installation
 
@@ -23,12 +23,9 @@ Just execute `npm install revoice.js` to install the package, have fun! :)
 
 ## Usage
 
-> [!WARNING]
-> For Node versions 21.1.X+ it is important to disable the navigator API. Unless the API is disabled, joining a voice channel will result in a "device not supported" error. It can be disabled with the `--no-experimental-global-navigator` flag when starting the node process.
-
 TL;DR: You initiate a client, you join a voice channel and then you play media.
 
-Please note that unlike on Discord bots, Revolt bots are able to join multiple voice channels at once. Thus a single bot is able to be in every voice channel it has access to. I have no idea about the limitations.
+Please note that unlike on Discord bots, Stoat bots are able to join multiple voice channels at once. Thus a single bot is able to be in every voice channel it has access to. I have no idea about the limitations.
 
 Media has to be created using the MediaPlayer class. You can stream both node streams and media files to revolt.
 
@@ -64,6 +61,15 @@ connection.on("join", () => {
   media.resume();
 });
 ```
+
+**TODO**:
+
+- [X] Play/Pause for the media class
+- [X] Non-voice events like UserJoined and roominfo
+- [ ] Audio reception
+- [ ] Error Handling; Right now, you have to take care of things like stopping the music if you start to play another song while one is playing
+
+*Disclamer: I might have forgotten some things on the list and thus it might be extended. Feel free to open issues to suggest new features :)*
 
 # Connect to self-hosted instances
 

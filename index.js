@@ -4,12 +4,12 @@ const Signaling = require("./src/Signaling.js");
 
 const User = require("./src/User.js");
 
-const Revoice = require("./src/Livekit.js")
+const Revoice = require("./src/Revoice.js")
 const Media = require("./src/Media.js")
 
 module.exports = {
-  ...Media, Revoice, Signaling, User, Legacy: [
+  ...Media, Revoice, Signaling, User, Legacy: {
 		...MediaV1,
-		RevoiceV1
-	]
+		Revoice: RevoiceV1
+	}
 }

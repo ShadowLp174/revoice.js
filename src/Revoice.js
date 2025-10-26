@@ -47,7 +47,7 @@ class Revoice extends EventEmitter {
    *
    * @param  {(Login|string)} loginData The way to login. If you're using a bot use your token, otherwise specify an email and password.
    * @param {(APIConfig)} [apiConfig={}] A configuration object for revolt-api. @see {@link https://github.com/insertish/oapi#example} The last example for further information
-   * @return {LRevoice}
+   * @return {Revoice}
    */
   constructor(loginData, client, apiConfig={}) {
     super();
@@ -58,7 +58,7 @@ class Revoice extends EventEmitter {
     this.connections = new Map();
 		this.users = new Map();
 
-    this.state = LRevoice.State.OFFLINE;
+    this.state = Revoice.State.OFFLINE;
   }
 	
 	static uid() {
@@ -228,10 +228,10 @@ class VoiceConnection extends EventEmitter {
   }
 
   async connect() {
-		this.updateState(LRevoice.State.JOINING);
+		this.updateState(Revoice.State.JOINING);
 		await this.room.connect(this.url, this.token, { autoSubscribe: false });
 		this.emit("join");
-		this.updateState(LRevoice.State.IDLE);
+		this.updateState(Revoice.State.IDLE);
 		const participants = this.room.remoteParticipants;
 		const users = [];
 		for (const [k, _v] of participants) {
@@ -250,7 +250,7 @@ class VoiceConnection extends EventEmitter {
 	}
 	async leave() {
 		this.users.forEach(u => this.resetUser(u));
-		this.updateState(LRevoice.State.OFFLINE);
+		this.updateState(Revoice.State.OFFLINE);
 		await this.disconnect();
 		this.emit("leave");
 	}
@@ -259,22 +259,22 @@ class VoiceConnection extends EventEmitter {
 	}
 
   async play(media) {
-    this.updateState(((!media.isMediaPlayer) ? LRevoice.State.UNKNOWN : LRevoice.State.BUFFERING));
+    this.updateState(((!media.isMediaPlayer) ? Revoice.State.UNKNOWN : Revoice.State.BUFFERING));
 
 		media.on("startplay", () => {
-			this.updateState(LRevoice.State.PLAYING);
+			this.updateState(Revoice.State.PLAYING);
 		});
 		media.on("pause", () => {
-			this.updateState(LRevoice.State.PAUSED);
+			this.updateState(Revoice.State.PAUSED);
 		});
 		media.on("unpause", () => {
-			this.updateState(LRevoice.State.PLAYING);
+			this.updateState(Revoice.State.PLAYING);
 		});
 		media.on("finish", () => {
-			this.updateState(LRevoice.State.IDLE);
+			this.updateState(Revoice.State.IDLE);
 		});
 		media.on("buffer", () => {
-			this.updateState(LRevoice.State.BUFFERING);
+			this.updateState(Revoice.State.BUFFERING);
 		});
 		this.media = media;
 
@@ -282,7 +282,7 @@ class VoiceConnection extends EventEmitter {
   }
 
   handleDisconnected() {
-		this.updateState(LRevoice.State.OFFLINE)
+		this.updateState(Revoice.State.OFFLINE)
     console.log("DIsconnected!");
   }
 }
