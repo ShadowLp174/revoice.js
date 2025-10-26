@@ -1,9 +1,7 @@
-const { RoomEvent, Room, dispose, LocalAudioTrack, AudioSource, TrackPublishOptions, TrackSource, AudioFrame, Track } = require("@livekit/rtc-node");
+const { RoomEvent, Room, dispose } = require("@livekit/rtc-node");
 const { EventEmitter } = require("events");
 const { API } = require("revolt-api");
-const { join } = require("path");
-const ffmpeg = require("fluent-ffmpeg");
-const ffmpegStatic = require("ffmpeg-static");
+const User = require("./User");
 
 process.env.LIVEKIT_LOG_LEVEL = 'debug';
 
@@ -23,10 +21,7 @@ process.env.LIVEKIT_LOG_LEVEL = 'debug';
  * @classdesc The main class used to join channels and initiate voice connections
  * @augments EventEmitter
  */
-class LRevoice extends EventEmitter {
-  API_ENDPOINT = "";
-  LIVEKIT_URL = "";
-
+class Revoice extends EventEmitter {
   client;
   api;
   connections;
@@ -54,15 +49,21 @@ class LRevoice extends EventEmitter {
    * @param {(APIConfig)} [apiConfig={}] A configuration object for revolt-api. @see {@link https://github.com/insertish/oapi#example} The last example for further information
    * @return {LRevoice}
    */
-  constructor(loginData, apiConfig={}) {
+  constructor(loginData, client, apiConfig={}) {
     super();
 
     this.login(loginData, apiConfig);
+		this.client = client;
 
     this.connections = new Map();
+		this.users = new Map();
 
     this.state = LRevoice.State.OFFLINE;
   }
+	
+	static uid() {
+		return Date.now().toString(36) + Math.random().toString(36).substr(2);
+	}
 
   async login(data, config) {
     if (!data.email) return this.api = new API({ ...config, authentication: { revolt: data } });
@@ -73,31 +74,65 @@ class LRevoice extends EventEmitter {
     this.session = d;
     this.connect(config);
   }
-
-	getVoiceConnection(channelId) {
-		return this.connections.get(channelId);
+	async connect(config) {
+		this.api = new API({
+			...config,
+			authentication: {
+				revolt: this.session
+			}
+		});
 	}
 
-  connect(channelId) {
+  join(channelId, leaveIfEmpty=false) {
     console.log(channelId);
     return new Promise(async (res, rej) => {
-      const { token, url } = await this.api.post("/channels/" + channelId + "/join_call", { "node": "worldwide" }, { headers: {
-        "User-Agent": "Mozilla/5.0 (X11; Linux  x86_64; rv:138.0) Gecko/20100101 Firefox/138.0",
-        "Accept": "/", "Accept-Language": "en-US,en;q=0.5",
-        "Content-Type": "application/json", "Sec-GPC": "1",
-        "Alt-Used": "stoat.chat", "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin",
-        "Priority": "u=0"
-      }});
+      const { token, url } = await this.api.post("/channels/" + channelId + "/join_call", { "node": "worldwide" });
 
       if (!(token && url)) throw token + url + "error";
 
-      const connection = new VoiceConnection(token, url, channelId);
+			const connection = new VoiceConnection(channelId, this, {
+				token,
+				url,
+				leaveOnEmpty: leaveIfEmpty
+			});
+			
+			connection.on("autoleave", () => {
+				this.connections.delete(channelId);
+			});
+			connection.on("userLeave", () => {
+				if (!this.users.has(u.id)) return;
+				const user = this.users.get(u.id);
+				user.connected = false;
+				user.connectedTo = null;
+				this.users.set(u.id, user);
+			})
+
 			this.connections.set(channelId, connection);
       res(connection);
     });
   }
+	getVoiceConnection(channelId) {
+		return this.connections.get(channelId);
+	}
+
+	updateState(state) {
+		this.state = state;
+		this.emit("state", state);
+	}
+
+	getUser(id) {
+		if (!this.users.has(id)) return false;
+		const user = this.users.get(id);
+		if (!user) return false;
+		if (!user.connected) return { user };
+		const connection = this.connections.get(user.connectedTo);
+		return { user: user, connection };
+	}
+	knowsUser(id) {
+		return this.users.has(id);
+	}
+
+	// TODO: user management
 }
 
 /**
@@ -108,22 +143,30 @@ class VoiceConnection extends EventEmitter {
   room;
   url;
   token;
+	voice;
+	channelId;
 
-  constructor(token, url, channelId) {
+	constructor(channelId, voice, opts) {
     super();
     this.room = new Room();
 		this.channelId = channelId;
+		this.voice = voice;
 
-    this.url = url;
-    this.token = token;
+    this.url = opts.url;
+    this.token = opts.token;
     
 		this.media = null;
+		this.users = [];
+
+		this.leaving = null;
+		this.leaveTimeout = opts.leaveOnEmpty;
     
     this.room
-		.on(RoomEvent.TrackSubscribed, this.handleTrackSubscribed)
-		.on(RoomEvent.Disconnected, this.handleDisconnected)
-		.on(RoomEvent.ConnectionStateChanged, console.log)
-		.on(RoomEvent.Reconnecting, console.log)
+			.on(RoomEvent.Disconnected, this.handleDisconnected)
+			.on(RoomEvent.ConnectionStateChanged, console.log)
+			.on(RoomEvent.Reconnecting, console.log)
+			.on(RoomEvent.ParticipantConnected, this.handleJoin)
+			.on(RoomEvent.ParticipantDisconnected, this.handleLeave)
 		
     this.connect();
 
@@ -139,21 +182,80 @@ class VoiceConnection extends EventEmitter {
     this.emit("state", state);
   }
 
+	getUsers() {
+		return this.users;
+	}
+	resetUser(user) {
+		this.emit("userLeave", user);
+	}
+
+	handleJoin(participant) {
+		const u = new User(participant.name, this.voice.api);
+		u.connectedTo = this.channelId;
+		this.users.push(u);
+		this.emit("userJoin");
+	}
+	handleLeave(participant) {
+		this.resetUser(participant);
+		const idx = this.users.findIndex(u => u.id == user.id);
+		if (idx !== -1) this.users.splice(idx, 1);
+		this.initLeave();
+		this.emit("userleave", user);
+	}
+
+	initLeave() {
+		if (this.leaving) {
+			clearTimeout(this.leaving);
+			this.leaving = null;
+		}
+		if (!(this.room.remoteParticipants.size === 0 && this.leaveTimeout)) return;
+
+		this.leaving = setTimeout(() => {
+			this.once("leave", () => {
+				this.destroy();
+				this.emit("autoleave");
+			});
+			this.leave();
+		}, this.leaveTimeout * 1000);
+	}
+
+	isConnected() {
+		return this.connected;
+	}
+
   get connected() {
     return (this.room) ? this.room.isConnected() : false;
   }
 
   async connect() {
 		this.updateState(LRevoice.State.JOINING);
-		await this.room.connect(this.url, this.token);
-		this.updateState(LRevoice.State.IDLE);
+		await this.room.connect(this.url, this.token, { autoSubscribe: false });
 		this.emit("join");
+		this.updateState(LRevoice.State.IDLE);
+		const participants = this.room.remoteParticipants;
+		const users = [];
+		for (const [k, _v] of participants) {
+			const u = new User(k, this.voice.api);
+			u.connectedTo = this.channelId;
+			users.push(u);
+			this.voice.users.set(u.id, u);
+		}
+		this.emit("roomfetched");
   }
 	async disconnect() {
 		if (this.media) {
 			this.media.destroy();
 		}
 		await this.room.disconnect();
+	}
+	async leave() {
+		this.users.forEach(u => this.resetUser(u));
+		this.updateState(LRevoice.State.OFFLINE);
+		await this.disconnect();
+		this.emit("leave");
+	}
+	async destroy() {
+		return await this.leave();
 	}
 
   async play(media) {
@@ -179,113 +281,10 @@ class VoiceConnection extends EventEmitter {
 		media.publishToRoom(this.room);
   }
 
-  async connectTest() {
-    console.log("connecting");
-
-    await this.room.connect(this.url, this.token);
-
-    const room = this.room;
-
-    console.log("Connected");
-
-    await (() => { return new Promise((res, rej) => setTimeout(res, 1500))})()
-
-    const filePath = join(__dirname, `./test.mp3`);
-
-    const SAMPLE_RATE = 48000;
-    const CHANNELS = 2;
-
-    const audioSource = new AudioSource(SAMPLE_RATE, CHANNELS);
-
-    const audioTrack = LocalAudioTrack.createAudioTrack("audio", audioSource);
-
-    try {
-      const options = new TrackPublishOptions();
-      options.source = TrackSource.SOURCE_MICROPHONE;
-      await room.localParticipant.publishTrack(audioTrack, options);
-      console.log('Audio track published');
-
-      const ffmpegProcess = ffmpeg(filePath)
-        .noVideo() // Ensure no video processing
-        .setFfmpegPath(ffmpegStatic)
-        .outputOptions([
-          '-f s16le',             // Format: signed 16-bit little-endian PCM
-          `-ar ${SAMPLE_RATE}`,   // Audio sample rate: 48000 Hz
-          `-ac ${CHANNELS}`,      // Audio channels: 2
-        ])
-        .on('start', (commandLine) => {
-          console.log('FFmpeg process started:', commandLine);
-        })
-        .on('error', (err, stdout, stderr) => {
-          console.error('FFmpeg error:', err.message);
-          console.error('FFmpeg stderr:', stderr);
-          // Stop the track on error
-          /*if (audioTrack) {
-            audioTrack.stop();
-            room.localParticipant.unpublishTrack(audioTrack.sid);
-          }*/
-        })
-        .on('end', async () => {
-          console.log('FFmpeg process finished.');
-				})
-				.on("codecData", (d) => {
-					console.log("codec data: ", d, d.audio)
-					codecData = d;
-				})
-				.on("progress", (d) => {
-					console.log(d);
-				});
-
-      const pcmStream = ffmpegProcess.pipe();
-
-      const chunks = [];
-			var capturedSamples = 0;
-			var codecData = {};
-      var playing = false;
-      pcmStream.on('data', async (chunk) => {
-        chunks.push(chunk);
-				if (!playing) return playOutChunk();
-      });
-
-
-      const playOutChunk = async () => {
-        playing = true;
-        const chunk = chunks.shift();
-
-        const samples = new Int16Array(
-          chunk.buffer,
-          chunk.byteOffset,
-          chunk.length / 2 // chunk.length is in bytes
-        );
-
-        const frame = new AudioFrame(
-          samples,
-          SAMPLE_RATE,
-          CHANNELS,
-          Math.trunc(samples.length / CHANNELS)
-        )
-				capturedSamples += samples.length / CHANNELS;
-        await audioSource.captureFrame(frame);
-        if (chunks.length > 0) return playOutChunk();
-        playing = false;
-      }
-
-			setInterval(() => {
-				console.log("curr seconds: ", capturedSamples / SAMPLE_RATE, " / ", codecData.duration);
-			}, 1000);
-
-    } catch (err) {
-      console.error('Failed to publish track or start FFmpeg:', err);
-    }
-  }
-
-  handleTrackSubscribed(track, trackPublication, participant) {
-
-  }
   handleDisconnected() {
 		this.updateState(LRevoice.State.OFFLINE)
     console.log("DIsconnected!");
   }
 }
 
-module.exports = LRevoice;
+module.exports = Revoice;
