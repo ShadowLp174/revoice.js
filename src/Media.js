@@ -22,6 +22,16 @@ class Media extends EventEmitter {
     this.source = new AudioSource(this.SAMPLE_RATE, this.CHANNELS);
     this.track = LocalAudioTrack.createAudioTrack("audio-" + this.id, this.source);
   }
+
+	playFile(path) {
+		if (!path) throw "You must specify a file to play!";
+		const stream = fs.createReadStream(path);
+		this.playStream(stream);
+	}
+	playStream(stream) {
+		if (!stream) throw "You must specify a stream to play!";
+		throw "Unsupported. Use MediaPlayer instead.";
+	}
 }
 
 class MediaPlayer extends Media {
@@ -193,4 +203,4 @@ class MediaPlayer extends Media {
   }
 }
 
-module.exports = { LMediaPlayer, Media }
+module.exports = { MediaPlayer, Media }
