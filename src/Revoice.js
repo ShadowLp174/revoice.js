@@ -99,7 +99,7 @@ class Revoice extends EventEmitter {
 			connection.on("autoleave", () => {
 				this.connections.delete(channelId);
 			});
-			connection.on("userLeave", () => {
+			connection.on("userLeave", (u) => {
 				if (!this.users.has(u.id)) return;
 				const user = this.users.get(u.id);
 				user.connected = false;
@@ -162,11 +162,11 @@ class VoiceConnection extends EventEmitter {
 		this.leaveTimeout = opts.leaveOnEmpty;
     
     this.room
-			.on(RoomEvent.Disconnected, this.handleDisconnected)
+			.on(RoomEvent.Disconnected, this.handleDisconnected.bind(this))
 			.on(RoomEvent.ConnectionStateChanged, console.log)
 			.on(RoomEvent.Reconnecting, console.log)
-			.on(RoomEvent.ParticipantConnected, this.handleJoin)
-			.on(RoomEvent.ParticipantDisconnected, this.handleLeave)
+			.on(RoomEvent.ParticipantConnected, this.handleJoin.bind(this))
+			.on(RoomEvent.ParticipantDisconnected, this.handleLeave.bind(this))
 		
     this.connect();
 
@@ -190,27 +190,31 @@ class VoiceConnection extends EventEmitter {
 	}
 
 	handleJoin(participant) {
-		const u = new User(participant.name, this.voice.api);
+		const u = new User(participant);
 		u.connectedTo = this.channelId;
 		this.users.push(u);
 		this.emit("userJoin");
 	}
 	handleLeave(participant) {
-		this.resetUser(participant);
-		const idx = this.users.findIndex(u => u.id == user.id);
+		const idx = this.users.findIndex(u => u.id == participant.name);
+		const user = this.users[idx];
 		if (idx !== -1) this.users.splice(idx, 1);
 		this.initLeave();
-		this.emit("userleave", user);
+		this.emit("userleave", user || new User(participant));
 	}
 
 	initLeave() {
 		if (this.leaving) {
+			console.log("clearing leave timeout");
 			clearTimeout(this.leaving);
 			this.leaving = null;
 		}
 		if (!(this.room.remoteParticipants.size === 0 && this.leaveTimeout)) return;
 
+		console.log("leaving initiated");
+
 		this.leaving = setTimeout(() => {
+			console.log("leaving");
 			this.once("leave", () => {
 				this.destroy();
 				this.emit("autoleave");
@@ -234,8 +238,8 @@ class VoiceConnection extends EventEmitter {
 		this.updateState(Revoice.State.IDLE);
 		const participants = this.room.remoteParticipants;
 		const users = [];
-		for (const [k, _v] of participants) {
-			const u = new User(k, this.voice.api);
+		for (const [k, v] of participants) {
+			const u = new User(v);
 			u.connectedTo = this.channelId;
 			users.push(u);
 			this.voice.users.set(u.id, u);
@@ -250,7 +254,7 @@ class VoiceConnection extends EventEmitter {
 	}
 	async leave() {
 		this.users.forEach(u => this.resetUser(u));
-		this.updateState(Revoice.State.OFFLINE);
+		if (this.state !== Revoice.State.OFFLINE) this.updateState(Revoice.State.OFFLINE);
 		await this.disconnect();
 		this.emit("leave");
 	}
@@ -282,7 +286,7 @@ class VoiceConnection extends EventEmitter {
   }
 
   handleDisconnected() {
-		this.updateState(Revoice.State.OFFLINE)
+		if (this.state !== Revoice.State.OFFLINE) this.updateState(Revoice.State.OFFLINE);
     console.log("DIsconnected!");
   }
 }
