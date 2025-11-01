@@ -84,7 +84,6 @@ class Revoice extends EventEmitter {
 	}
 
   join(channelId, leaveIfEmpty=false) {
-    console.log(channelId);
     return new Promise(async (res, rej) => {
       const { token, url } = await this.api.post("/channels/" + channelId + "/join_call", { "node": "worldwide" });
 
@@ -205,16 +204,12 @@ class VoiceConnection extends EventEmitter {
 
 	initLeave() {
 		if (this.leaving) {
-			console.log("clearing leave timeout");
 			clearTimeout(this.leaving);
 			this.leaving = null;
 		}
 		if (!(this.room.remoteParticipants.size === 0 && this.leaveTimeout)) return;
 
-		console.log("leaving initiated");
-
 		this.leaving = setTimeout(() => {
-			console.log("leaving");
 			this.once("leave", () => {
 				this.destroy();
 				this.emit("autoleave");

@@ -66,6 +66,7 @@ connection.on("join", () => {
 
 - [X] Play/Pause for the media class
 - [X] Non-voice events like UserJoined and roominfo
+- [ ] Audio Level Normalisation
 - [ ] Audio reception
 - [ ] Error Handling; Right now, you have to take care of things like stopping the music if you start to play another song while one is playing
 

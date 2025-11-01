@@ -74,10 +74,6 @@ class MediaPlayer extends Media {
 		this.fProc = null;
 
 		this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: 1 });
-		this.volumeTransformer.on("data", (chunk) => {
-			this.chunks.push(chunk)
-			if (this.readyPlayPacket && !this.paused) return this.playOutPacket();
-		});
 		this.volumeTransformer.once("data", () => {
 			this.playing = true;
 			this.emit("startplay");
@@ -151,34 +147,37 @@ class MediaPlayer extends Media {
 	}
 
   async playOutPacket() {
-    if (this.chunks.length === 0) return this.readyPlayPacket = true;
-    this.readyPlayPacket = false;
-
-    const chunk = this.chunks.shift();
-
-    const samples = new Int16Array(
-      chunk.buffer,
-      chunk.byteOffset,
-      chunk.length / 2 // chunk.length is in bytes
-    );
-    const frame = new AudioFrame(
-      samples,
-      this.SAMPLE_RATE,
-      this.CHANNELS,
-      Math.trunc(samples.length / this.CHANNELS)
-    )
-
-    await this.source.captureFrame(frame);
-		this.playedOutSamples += samples.length / this.CHANNELS;
-
-    if (this.chunks.length > 0 && !this.paused) return this.playOutPacket();
-    this.readyPlayPacket = true;
-    if (this.chunks.length === 0 && this.ffmpegFinished) this.stop();
+		return new Promise((res) => {
+			if (this.chunks.length === 0) return res(this.readyPlayPacket = true);
+			this.readyPlayPacket = false;
+	
+			const c = this.chunks.shift();
+			
+			this.volumeTransformer.once("data", async (chunk) => {
+				const samples = new Int16Array(
+					chunk.buffer,
+					chunk.byteOffset,
+					chunk.length / 2 // chunk.length is in bytes
+				);
+				const frame = new AudioFrame(
+					samples,
+					this.SAMPLE_RATE,
+					this.CHANNELS,
+					Math.trunc(samples.length / this.CHANNELS)
+				)
+		
+				await this.source.captureFrame(frame);
+				this.playedOutSamples += samples.length / this.CHANNELS;
+		
+				if (this.chunks.length > 0 && !this.paused) return res(this.playOutPacket());
+				this.readyPlayPacket = true;
+				if (this.chunks.length === 0 && this.ffmpegFinished) this.stop();
+				return res();
+			});
+			this.volumeTransformer.write(c);
+		});
   }
-	async processFfmpeg() {
-
-	}
-
+	
   async playStream(stream) {
 		this.emit("buffer");
 		this.originStream = stream;
@@ -209,9 +208,11 @@ class MediaPlayer extends Media {
         this.ffmpegFinished = true;
 				console.log("ffmpeg finished");
       });
-    
-    fProc.pipe(this.volumeTransformer);
 		this.fProc = fProc;
+		fProc.pipe().on("data", (chunk) => {
+			this.chunks.push(chunk)
+			if (this.readyPlayPacket && !this.paused) return this.playOutPacket();
+		})
   }
 }
 
