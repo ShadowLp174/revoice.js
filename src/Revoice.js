@@ -192,6 +192,7 @@ class VoiceConnection extends EventEmitter {
 		const u = new User(participant);
 		u.connectedTo = this.channelId;
 		this.users.push(u);
+		this.initLeave();
 		this.emit("userJoin");
 	}
 	handleLeave(participant) {
