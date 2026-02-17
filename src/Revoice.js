@@ -49,25 +49,24 @@ class Revoice extends EventEmitter {
    * @param {(APIConfig)} [apiConfig={}] A configuration object for revolt-api. @see {@link https://github.com/insertish/oapi#example} The last example for further information
    * @return {Revoice}
    */
-  constructor(loginData, client, apiConfig={}) {
+  constructor(loginData, apiConfig={}) {
     super();
 
     this.login(loginData, apiConfig);
-		this.client = client;
 
     this.connections = new Map();
 		this.users = new Map();
 
     this.state = Revoice.State.OFFLINE;
   }
-	
+
 	static uid() {
 		return Date.now().toString(36) + Math.random().toString(36).substr(2);
 	}
 
   async login(data, config) {
     if (!data.email) return this.api = new API({ ...config, authentication: { revolt: data } });
-  
+
     this.api = new API();
     const d = await this.api.post("/auth/session/login", data);
     if (d.result != "Success") throw "MFA not implemented or login not successfull!";
@@ -94,7 +93,7 @@ class Revoice extends EventEmitter {
 				url,
 				leaveOnEmpty: leaveIfEmpty
 			});
-			
+
 			connection.on("autoleave", () => {
 				this.connections.delete(channelId);
 			});
@@ -106,7 +105,7 @@ class Revoice extends EventEmitter {
 				this.users.set(u.id, user);
 			})
 
-			this.connections.set(channelId, connection);
+      this.connections.set(channelId, connection);
       res(connection);
     });
   }
@@ -153,20 +152,20 @@ class VoiceConnection extends EventEmitter {
 
     this.url = opts.url;
     this.token = opts.token;
-    
+
 		this.media = null;
 		this.users = [];
 
 		this.leaving = null;
 		this.leaveTimeout = opts.leaveOnEmpty;
-    
+
     this.room
 			.on(RoomEvent.Disconnected, this.handleDisconnected.bind(this))
 			.on(RoomEvent.ConnectionStateChanged, console.log)
 			.on(RoomEvent.Reconnecting, console.log)
 			.on(RoomEvent.ParticipantConnected, this.handleJoin.bind(this))
 			.on(RoomEvent.ParticipantDisconnected, this.handleLeave.bind(this))
-		
+
     this.connect();
 
     process.on("SIGINT", async () => {
@@ -192,7 +191,7 @@ class VoiceConnection extends EventEmitter {
 		const u = new User(participant);
 		u.connectedTo = this.channelId;
 		this.users.push(u);
-		this.initLeave();
+    this.initLeave();
 		this.emit("userJoin");
 	}
 	handleLeave(participant) {
@@ -229,9 +228,9 @@ class VoiceConnection extends EventEmitter {
 
   async connect() {
 		this.updateState(Revoice.State.JOINING);
-		await this.room.connect(this.url, this.token, { autoSubscribe: false });
+		await this.room.connect(this.url, this.token, { autoSubscribe: false, logLevel: "info" });
 		this.emit("join");
-		this.updateState(Revoice.State.IDLE);
+    this.updateState(Revoice.State.IDLE);
 		const participants = this.room.remoteParticipants;
 		const users = [];
 		for (const [k, v] of participants) {
