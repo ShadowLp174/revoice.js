@@ -44,13 +44,15 @@ class Media extends EventEmitter {
 class MediaPlayer extends Media {
 	/**
 	 * @description Initiates the MediaPlayer instance.
+	 * @param {boolean} normalisation=true Wether to pass the `loudnorm` flag to FFmpeg.
 	 *
 	 * @return {MediaPlayer}            The new instance.
 	 */
-  constructor() {
+  constructor(normalisation=true) {
     super();
 
-		this.isMediaPlayer = true;
+    this.isMediaPlayer = true;
+    this.loudnessNormalisation = normalisation;
 
     this.initValues();
   }
@@ -105,7 +107,7 @@ class MediaPlayer extends Media {
 
 	stop(init=true) {
 		this.readyPlayPacket = false; // prevent new packets from being played out
-			
+
 		this.#cleanUp();
 
 		if (init) this.initValues();
@@ -150,9 +152,9 @@ class MediaPlayer extends Media {
 		return new Promise((res) => {
 			if (this.chunks.length === 0) return res(this.readyPlayPacket = true);
 			this.readyPlayPacket = false;
-	
+
 			const c = this.chunks.shift();
-			
+
 			this.volumeTransformer.once("data", async (chunk) => {
 				const samples = new Int16Array(
 					chunk.buffer,
@@ -165,10 +167,10 @@ class MediaPlayer extends Media {
 					this.CHANNELS,
 					Math.trunc(samples.length / this.CHANNELS)
 				)
-		
+
 				await this.source.captureFrame(frame);
 				this.playedOutSamples += samples.length / this.CHANNELS;
-		
+
 				if (this.chunks.length > 0 && !this.paused) return res(this.playOutPacket());
 				this.readyPlayPacket = true;
 				if (this.chunks.length === 0 && this.ffmpegFinished) this.stop();
@@ -177,7 +179,7 @@ class MediaPlayer extends Media {
 			this.volumeTransformer.write(c);
 		});
   }
-	
+
   async playStream(stream) {
 		this.emit("buffer");
 		this.originStream = stream;
@@ -188,6 +190,7 @@ class MediaPlayer extends Media {
     const fProc = ffmpeg(stream)
       .noVideo()
       .setFfmpegPath(fPath)
+      .audioFilters("loudnorm")
       //.native() // TODO: check if necessary
       .outputOptions([
         `-f s16le`,
