@@ -1,7 +1,7 @@
 {
   "name": "revoice.js",
-  "version": "0.2.168",
-  "description": "A voice module for Revolt",
+  "version": "0.2.1681",
+  "description": "A voice module for Stoat",
   "main": "index.js",
   "typings": "./typings/index.d.ts",
   "scripts": {
@@ -17,6 +17,7 @@
     "revolt.js",
 		"stoat",
 		"stoat.chat",
+		"stoat.js",
     "ffmpeg",
     "streams",
     "voice channels"
