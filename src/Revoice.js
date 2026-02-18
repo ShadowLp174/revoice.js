@@ -97,13 +97,18 @@ class Revoice extends EventEmitter {
 			connection.on("autoleave", () => {
 				this.connections.delete(channelId);
 			});
-			connection.on("userLeave", (u) => {
-				if (!this.users.has(u.id)) return;
-				const user = this.users.get(u.id);
-				user.connected = false;
-				user.connectedTo = null;
-				this.users.set(u.id, user);
-			})
+      connection.on("userLeave", (u) => {
+        if (!this.users.has(u.id)) return;
+        const user = this.users.get(u.id);
+        user.connected = false;
+        user.connectedTo = null;
+        this.users.set(u.id, user);
+      });
+      connection.on("userJoin", (u) => {
+        if (this.users.has(u.id)) return;
+        u.connectedTo = connection.channelId;
+        this.users.set(u.id, u);
+      });
 
       this.connections.set(channelId, connection);
       res(connection);
@@ -192,7 +197,7 @@ class VoiceConnection extends EventEmitter {
 		u.connectedTo = this.channelId;
 		this.users.push(u);
     this.initLeave();
-		this.emit("userJoin");
+		this.emit("userJoin", u);
 	}
 	handleLeave(participant) {
 		const idx = this.users.findIndex(u => u.id == participant.name);
