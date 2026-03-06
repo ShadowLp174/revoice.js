@@ -65,7 +65,11 @@ class Revoice extends EventEmitter {
 	}
 
   async login(data, config) {
-    if (!data.email) return this.api = new API({ ...config, authentication: { revolt: data } });
+    if (!data.email) return this.api = new API({
+      baseURL: "https://stoat.chat/api",
+      ...config,
+      authentication: { revolt: data }
+    });
 
     this.api = new API();
     const d = await this.api.post("/auth/session/login", data);
