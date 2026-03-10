@@ -212,10 +212,10 @@ class MediaPlayer extends Media {
 				console.log("ffmpeg finished");
       });
 		this.fProc = fProc;
-		fProc.pipe().on("data", (chunk) => {
-			this.chunks.push(chunk)
-			if (this.readyPlayPacket && !this.paused) return this.playOutPacket();
-		})
+    fProc.pipe().on("data", (chunk) => {
+      this.chunks.push(chunk)
+      if (this.readyPlayPacket && !this.paused) return this.playOutPacket();
+    })
   }
 }
 

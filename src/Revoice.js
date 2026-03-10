@@ -247,7 +247,8 @@ class VoiceConnection extends EventEmitter {
 			u.connectedTo = this.channelId;
 			users.push(u);
 			this.voice.users.set(u.id, u);
-		}
+    }
+    this.initLeave();
 		this.emit("roomfetched");
   }
 	async disconnect() {
