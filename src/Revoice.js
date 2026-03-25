@@ -280,7 +280,8 @@ class VoiceConnection extends EventEmitter {
 		media.on("unpause", () => {
 			this.updateState(Revoice.State.PLAYING);
 		});
-		media.on("finish", () => {
+    media.on("finish", () => {
+      if (this.state === Revoice.State.OFFLINE) return;
 			this.updateState(Revoice.State.IDLE);
 		});
 		media.on("buffer", () => {
