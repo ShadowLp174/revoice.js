@@ -1,6 +1,6 @@
 {
   "name": "revoice.js",
-  "version": "0.2.1692",
+  "version": "0.2.1693",
   "description": "A voice module for Stoat",
   "main": "index.js",
   "typings": "./typings/index.d.ts",

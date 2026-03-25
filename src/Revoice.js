@@ -248,6 +248,7 @@ class VoiceConnection extends EventEmitter {
 			users.push(u);
 			this.voice.users.set(u.id, u);
     }
+    this.users = users;
     this.initLeave();
 		this.emit("roomfetched");
   }
