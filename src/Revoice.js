@@ -58,6 +58,15 @@ class Revoice extends EventEmitter {
 		this.users = new Map();
 
     this.state = Revoice.State.OFFLINE;
+
+    process.on("SIGINT", async () => {
+      const promises = []
+      for (let [k, v] of this.connections) {
+        this.promises.push(v.onSIGINT);
+      }
+      await Promise.allSettled(promises);
+			process.exit();
+    });
   }
 
 	static uid() {
@@ -176,12 +185,11 @@ class VoiceConnection extends EventEmitter {
 			.on(RoomEvent.ParticipantDisconnected, this.handleLeave.bind(this))
 
     this.connect();
+  }
 
-    process.on("SIGINT", async () => {
-      await this.room.disconnect();
-      await dispose();
-			process.exit();
-    });
+  async onSIGINT() {
+    await this.room.disconnect();
+    await dispose();
   }
 
   updateState(state) {
@@ -240,10 +248,11 @@ class VoiceConnection extends EventEmitter {
 		await this.room.connect(this.url, this.token, { autoSubscribe: false, logLevel: "info" });
 		this.emit("join");
     this.updateState(Revoice.State.IDLE);
-		const participants = this.room.remoteParticipants;
+    const participants = this.room.remoteParticipants;
 		const users = [];
-		for (const [k, v] of participants) {
-			const u = new User(v);
+    for (const [k, v] of participants) {
+      const u = new User(v);
+      console.log(u);
 			u.connectedTo = this.channelId;
 			users.push(u);
 			this.voice.users.set(u.id, u);
