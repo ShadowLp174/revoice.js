@@ -156,6 +156,10 @@ class MediaPlayer extends Media {
 			const c = this.chunks.shift();
 
 			this.volumeTransformer.once("data", async (chunk) => {
+				// Guard: if stop() was called while waiting for data,
+				// readyPlayPacket is false — discard this chunk silently.
+				if (!this.readyPlayPacket) return res();
+
 				const samples = new Int16Array(
 					chunk.buffer,
 					chunk.byteOffset,
@@ -166,10 +170,17 @@ class MediaPlayer extends Media {
 					this.SAMPLE_RATE,
 					this.CHANNELS,
 					Math.trunc(samples.length / this.CHANNELS)
-				)
+				);
 
-				await this.source.captureFrame(frame);
-				this.playedOutSamples += samples.length / this.CHANNELS;
+				try {
+					await this.source.captureFrame(frame);
+					this.playedOutSamples += samples.length / this.CHANNELS;
+				} catch (e) {
+					// AudioSource was closed or in InvalidState (track stopped mid-frame).
+					// Discard this frame silently and stop processing further chunks.
+					this.readyPlayPacket = true;
+					return res();
+				}
 
 				if (this.chunks.length > 0 && !this.paused) return res(this.playOutPacket());
 				this.readyPlayPacket = true;
