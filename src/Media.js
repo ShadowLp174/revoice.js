@@ -4,6 +4,11 @@ const fPath = require("ffmpeg-static");
 const { EventEmitter } = require("events");
 const prism = require("prism-media");
 
+function isIgnorableCaptureError(err) {
+  const msg = err?.message ?? String(err ?? "");
+  return msg.includes("InvalidState") || msg.includes("failed to capture frame") || msg.includes("capture frame");
+}
+
 /**
  * @class
  * @classdesc Basic class to process audio streams. As of 5a2fd7bcde9819c927157a965cfafdb8661f3e4e this doesn't have any functionality anymore and acts more like an interface.
@@ -74,6 +79,8 @@ class MediaPlayer extends Media {
 
 		this.originStream = null;
 		this.fProc = null;
+		this.ffmpegOutput = null;
+		this.stopped = false;
 
 		this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: 1 });
 		this.volumeTransformer.once("data", () => {
@@ -100,12 +107,16 @@ class MediaPlayer extends Media {
   }
 
 	#cleanUp() {
+		this.stopped = true;
+		this.readyPlayPacket = false;
 		this.originStream?.destroy();
-		if (this.ffmpegFinished) this.fProc.kill(); // "SIGSTOP" to suspend
+		this.ffmpegOutput?.destroy?.();
+		if (this.fProc && !this.ffmpegFinished) this.fProc.kill();
 		this.volumeTransformer.destroy();
 	}
 
 	stop(init=true) {
+		if (this.stopped) return;
 		this.readyPlayPacket = false; // prevent new packets from being played out
 
 		this.#cleanUp();
@@ -148,18 +159,15 @@ class MediaPlayer extends Media {
 		await room.localParticipant.publishTrack(this.track, this.publishOptions);
 	}
 
-  async playOutPacket() {
+	async playOutPacket() {
 		return new Promise((res) => {
+			if (this.stopped) return res();
 			if (this.chunks.length === 0) return res(this.readyPlayPacket = true);
 			this.readyPlayPacket = false;
 
 			const c = this.chunks.shift();
 
 			this.volumeTransformer.once("data", async (chunk) => {
-				// Guard: if stop() was called while waiting for data,
-				// readyPlayPacket is false — discard this chunk silently.
-				if (!this.readyPlayPacket) return res();
-
 				const samples = new Int16Array(
 					chunk.buffer,
 					chunk.byteOffset,
@@ -170,17 +178,16 @@ class MediaPlayer extends Media {
 					this.SAMPLE_RATE,
 					this.CHANNELS,
 					Math.trunc(samples.length / this.CHANNELS)
-				);
+				)
 
 				try {
 					await this.source.captureFrame(frame);
-					this.playedOutSamples += samples.length / this.CHANNELS;
-				} catch (e) {
-					// AudioSource was closed or in InvalidState (track stopped mid-frame).
-					// Discard this frame silently and stop processing further chunks.
-					this.readyPlayPacket = true;
+				} catch (err) {
+					if (this.stopped || isIgnorableCaptureError(err)) return res();
+					this.emit("error", err);
 					return res();
 				}
+				this.playedOutSamples += samples.length / this.CHANNELS;
 
 				if (this.chunks.length > 0 && !this.paused) return res(this.playOutPacket());
 				this.readyPlayPacket = true;
@@ -195,13 +202,13 @@ class MediaPlayer extends Media {
 		this.emit("buffer");
 		this.originStream = stream;
     this.started = false;
+		this.stopped = false;
 
     this.ffmpegFinished = false;
 		this.playedOutSamples = 0;
-    const fProc = ffmpeg(stream)
+    let fProc = ffmpeg(stream)
       .noVideo()
       .setFfmpegPath(fPath)
-      .audioFilters("loudnorm")
       //.native() // TODO: check if necessary
       .outputOptions([
         `-f s16le`,
@@ -213,7 +220,7 @@ class MediaPlayer extends Media {
       })
       .on("error", (err, stdout, stderr) => {
 				this.ffmpegFinished = true;
-        // TODO: error handling
+        this.emit("error", err);
       })
 			.on("codecData", (d) => {
 				this.codecData = d;
@@ -222,11 +229,25 @@ class MediaPlayer extends Media {
         this.ffmpegFinished = true;
 				console.log("ffmpeg finished");
       });
+		if (this.loudnessNormalisation) {
+			fProc = fProc.audioFilters("loudnorm");
+		}
 		this.fProc = fProc;
-    fProc.pipe().on("data", (chunk) => {
+    const out = fProc.pipe();
+		this.ffmpegOutput = out;
+    out.on("data", (chunk) => {
+			if (this.stopped) return;
       this.chunks.push(chunk)
       if (this.readyPlayPacket && !this.paused) return this.playOutPacket();
-    })
+    });
+		out.on("error", (err) => {
+			this.ffmpegFinished = true;
+			if (!this.stopped) this.emit("error", err);
+		});
+		out.on("end", () => {
+			this.ffmpegFinished = true;
+			if (!this.stopped && this.chunks.length === 0) this.stop();
+		});
   }
 }
 
