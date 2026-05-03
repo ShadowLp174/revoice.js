@@ -5,6 +5,18 @@ const { EventEmitter } = require("events");
 const fs = require("fs"); // FIX: was missing — playFile() would crash with ReferenceError
 const prism = require("prism-media");
 
+// ---------------------------------------------------------------------------
+// Backpressure constants
+//
+// FFmpeg decodes audio far faster than real-time. Without a cap every player
+// buffers the entire decoded track — a 100h stream is ~64 GB of s16le PCM.
+//
+// At ~4 KB per chunk, MAX_CHUNKS=100 keeps the buffer under ~400 KB (~2 s of
+// audio) per player regardless of track length.
+// ---------------------------------------------------------------------------
+const MAX_CHUNKS    = 100; // pause FFmpeg output when buffer reaches this size
+const RESUME_CHUNKS =  40; // resume FFmpeg output once buffer drains this low
+
 /**
  * @class
  * @classdesc Basic class to process audio streams.
@@ -85,12 +97,19 @@ class MediaPlayer extends Media {
 	pause() {
 		if (this.paused) return;
 		this.paused = true;
+		// Also pause the FFmpeg output so we stop accumulating chunks while
+		// playback is suspended — without this the buffer keeps growing.
+		try { this._ffmpegOut?.pause(); } catch (_) {}
 		this.emit("pause");
 	}
 
 	resume() {
 		if (!this.paused) return;
 		this.paused = false;
+		// Only resume FFmpeg output if the buffer has room.
+		if (this.chunks.length < RESUME_CHUNKS) {
+			try { this._ffmpegOut?.resume(); } catch (_) {}
+		}
 		if (this.readyPlayPacket) this.playOutPacket();
 		this.emit("unpause");
 	}
@@ -200,6 +219,17 @@ class MediaPlayer extends Media {
 				await this.source.captureFrame(frame);
 				this.playedOutSamples += samples.length / this.CHANNELS;
 
+				// BACKPRESSURE: resume FFmpeg output when the buffer drains
+				// below the low-water mark so it can refill the ~400 KB window.
+				if (
+					this._ffmpegOut &&
+					!this.paused &&
+					!this.ffmpegFinished &&
+					this.chunks.length < RESUME_CHUNKS
+				) {
+					try { this._ffmpegOut.resume(); } catch (_) {}
+				}
+
 				if (this.chunks.length > 0 && !this.paused) return res(this.playOutPacket());
 				this.readyPlayPacket = true;
 				if (this.chunks.length === 0 && this.ffmpegFinished) this.stop();
@@ -257,8 +287,19 @@ class MediaPlayer extends Media {
 			})
 			.on("error", (err) => {
 				this.ffmpegFinished = true;
-				// Propagate the error so Player.mjs can handle it.
-				if (!this.stopped) this.emit("error", err);
+				// Suppress errors that come from our own intentional kill() —
+				// when stop()/leave calls #cleanUp() it sends SIGKILL, which
+				// fluent-ffmpeg turns into an "error" event. Without this guard
+				// that bubbles up as an uncaughtException crashing the process.
+				if (this.stopped) return;
+				const msg = err?.message ?? String(err);
+				if (
+					msg.includes("SIGKILL") ||
+					msg.includes("killed with signal") ||
+					msg.includes("aborted") ||
+					msg.includes("Input stream error")
+				) return;
+				this.emit("error", err);
 			})
 			.on("codecData", (d) => {
 				this.codecData = d;
@@ -276,6 +317,15 @@ class MediaPlayer extends Media {
 		out.on("data", (chunk) => {
 			if (this.stopped) return;
 			this.chunks.push(chunk);
+
+			// BACKPRESSURE: pause FFmpeg output when the buffer is full.
+			// Without this, FFmpeg decodes the entire track into this.chunks
+			// before playback consumes anything.
+			// 100h stream at 48kHz stereo s16le ≈ 64 GB — we cap at ~400 KB.
+			if (this.chunks.length >= MAX_CHUNKS) {
+				try { out.pause(); } catch (_) {}
+			}
+
 			if (this.readyPlayPacket && !this.paused) return this.playOutPacket();
 		});
 		out.on("error", (err) => {
