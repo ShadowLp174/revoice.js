@@ -37,27 +37,19 @@ class Media extends EventEmitter {
  * @augments Media
  * @description An advanced version of the Media class with media controls.
  *
- * How the pipeline works (no chunk array, no manual backpressure):
+ * Pipeline (demand-driven, nothing buffered in JS memory):
  *
- *   HTTP/file stream
- *       → FFmpeg (decode/resample to s16le 48kHz stereo)
- *           → VolumeTransformer (prism-media Transform stream)
- *               → _processLoop() reads one frame at a time via async iterator
- *                   → AudioSource.captureFrame() (real-time, blocks until LiveKit
- *                      is ready for the next frame)
+ *   FFmpeg stdout (paused/Readable mode)
+ *       → one chunk read manually via stream.read()
+ *           → VolumeTransformer.write() / read one transformed chunk
+ *               → AudioFrame → AudioSource.captureFrame()  (real-time async)
+ *                   → loop back and read the next chunk
  *
- * Because captureFrame() is async and real-time, the entire pipeline naturally
- * throttles: VolumeTransformer's internal buffer fills → FFmpeg stdout buffer
- * fills → OS pipe buffer fills → FFmpeg itself slows to real-time speed.
- * No data is stored in JS memory regardless of track length.
- *
- * @property {number} seconds  - Seconds elapsed during playback.
- * @property {string} currTimestamp - Current timestamp as hh:mm:ss.
+ * FFmpeg stdout is kept in paused mode. We call .read() only after
+ * captureFrame() resolves, so FFmpeg is throttled to exactly playback speed
+ * and nothing accumulates in memory regardless of track length.
  */
 class MediaPlayer extends Media {
-    /**
-     * @param {boolean} normalisation=true Whether to pass the loudnorm filter to FFmpeg.
-     */
     constructor(normalisation = true) {
         super();
         this.isMediaPlayer = true;
@@ -76,14 +68,9 @@ class MediaPlayer extends Media {
         this.originStream     = null;
         this.fProc            = null;
         this._ffmpegOut       = null;
-        // Resolve handle so _processLoop can be unblocked on pause/stop.
         this._unpauseResolve  = null;
 
         this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: 1 });
-        this.volumeTransformer.once("data", () => {
-            this.playing = true;
-            this.emit("startplay");
-        });
     }
 
     pause() {
@@ -95,7 +82,6 @@ class MediaPlayer extends Media {
     resume() {
         if (!this.paused) return;
         this.paused = false;
-        // Unblock the _processLoop which is waiting on the pause gate.
         if (this._unpauseResolve) {
             this._unpauseResolve();
             this._unpauseResolve = null;
@@ -108,22 +94,18 @@ class MediaPlayer extends Media {
         return this.volumeTransformer.setVolume(v);
     }
 
-    // Wait until unpaused (or stopped). Called inside the frame loop.
     _waitForResume() {
-        return new Promise(resolve => {
-            this._unpauseResolve = resolve;
-        });
+        return new Promise(resolve => { this._unpauseResolve = resolve; });
     }
 
     #cleanUp() {
-        try { this._ffmpegOut?.destroy(); }    catch (_) {}
+        try { this._ffmpegOut?.destroy(); }       catch (_) {}
         this._ffmpegOut = null;
-        try { this.originStream?.destroy(); }  catch (_) {}
+        try { this.originStream?.destroy(); }     catch (_) {}
         if (this.fProc) {
-            try { this.fProc.kill(); }         catch (_) {}
+            try { this.fProc.kill(); }            catch (_) {}
         }
         try { this.volumeTransformer.destroy(); } catch (_) {}
-        // Unblock _processLoop if paused so it can see stopped=true and exit.
         if (this._unpauseResolve) {
             this._unpauseResolve();
             this._unpauseResolve = null;
@@ -131,43 +113,28 @@ class MediaPlayer extends Media {
     }
 
     stop(init = true) {
-        // Only emit "finish" if we were actually playing. This prevents the
-        // redundant stop() call at the top of _doPlayNext (for cleanup between
-        // songs) from firing "finish" on a player that already naturally stopped,
-        // which would resolve _streamViaRevoice\'s once("finish") for the next
-        // song before it starts — causing every queued song to be skipped.
         const wasPlaying = !this.stopped;
-
         this.stopped = true;
         this.#cleanUp();
-
         if (init) {
             this.initValues();
-            // initValues() resets stopped→false. Re-apply so redundant stop()
-            // calls stay silent until playStream() marks the player live again.
-            this.stopped = true;
+            this.stopped = true; // survive initValues() reset
         }
-
         if (wasPlaying) this.emit("finish");
     }
 
-    destroy() {
-        return this.stop(false);
-    }
+    destroy() { return this.stop(false); }
 
-    get duration()      { return this.codecData?.duration || 0; }
-    get seconds()       { return this.playedOutSamples / this.SAMPLE_RATE; }
+    get duration()        { return this.codecData?.duration || 0; }
+    get seconds()         { return this.playedOutSamples / this.SAMPLE_RATE; }
     get localAudioTrack() { return this.track; }
 
     get currTimestamp() {
-        const sec_num = this.seconds;
-        let hours   = Math.floor(sec_num / 3600);
-        let minutes = Math.floor((sec_num - hours * 3600) / 60);
-        let seconds = Math.floor(sec_num - hours * 3600 - minutes * 60);
-        if (hours   < 10) hours   = "0" + hours;
-        if (minutes < 10) minutes = "0" + minutes;
-        if (seconds < 10) seconds = "0" + seconds;
-        return `${hours}:${minutes}:${seconds}`;
+        const s   = Math.floor(this.seconds);
+        const h   = Math.floor(s / 3600);
+        const m   = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        return [h, m, sec].map(n => String(n).padStart(2, "0")).join(":");
     }
 
     get publishOptions() {
@@ -181,61 +148,106 @@ class MediaPlayer extends Media {
     }
 
     /**
-     * Core frame loop. Reads PCM chunks from the VolumeTransformer async
-     * iterator one at a time, converts each to an AudioFrame, and feeds it
-     * to LiveKit. Because captureFrame() is real-time async, this naturally
-     * throttles FFmpeg to playback speed — no buffering in JS memory at all.
+     * Read exactly one chunk from a stream that is in paused mode.
+     * Returns null when the stream ends.
      */
-    async _processLoop(volumeTransformer) {
-        try {
-            for await (const chunk of volumeTransformer) {
-                if (this.stopped) break;
+    _readChunk(readable) {
+        return new Promise((resolve) => {
+            // Try a synchronous read first — data may already be in the
+            // stream's tiny internal highWaterMark buffer (default 16 KB).
+            const chunk = readable.read();
+            if (chunk !== null) return resolve(chunk);
 
-                // Pause gate — wait here until resume() is called.
-                while (this.paused && !this.stopped) {
-                    await this._waitForResume();
-                }
-                if (this.stopped) break;
+            // Nothing available yet — wait for the next "readable" event,
+            // which fires when at least one chunk is ready, then read it.
+            const onReadable = () => {
+                cleanup();
+                resolve(readable.read());
+            };
+            const onEnd = () => { cleanup(); resolve(null); };
+            const onClose = () => { cleanup(); resolve(null); };
+            const onError = () => { cleanup(); resolve(null); };
 
-                const samples = new Int16Array(
-                    chunk.buffer,
-                    chunk.byteOffset,
-                    chunk.length / 2
-                );
-                const frame = new AudioFrame(
-                    samples,
-                    this.SAMPLE_RATE,
-                    this.CHANNELS,
-                    Math.trunc(samples.length / this.CHANNELS)
-                );
+            const cleanup = () => {
+                readable.off("readable", onReadable);
+                readable.off("end",      onEnd);
+                readable.off("close",    onClose);
+                readable.off("error",    onError);
+            };
 
-                await this.source.captureFrame(frame);
-                if (this.stopped) break;
+            readable.once("readable", onReadable);
+            readable.once("end",      onEnd);
+            readable.once("close",    onClose);
+            readable.once("error",    onError);
+        });
+    }
 
-                this.playedOutSamples += samples.length / this.CHANNELS;
+    /**
+     * Write one chunk into the VolumeTransformer and read back the
+     * transformed output synchronously. prism-media's VolumeTransformer
+     * is a synchronous Transform — one write always produces one read.
+     */
+    _transformChunk(chunk) {
+        this.volumeTransformer.write(chunk);
+        return this.volumeTransformer.read();
+    }
+
+    /**
+     * Demand-driven playback loop.
+     *
+     * We keep FFmpeg's output stream in paused (non-flowing) mode and call
+     * .read() only after captureFrame() has returned. This means:
+     *   - FFmpeg stdout OS buffer: at most ~64 KB (kernel default pipe size)
+     *   - VolumeTransformer buffer: at most one chunk (~few KB, highWaterMark)
+     *   - JS heap: nothing stored between iterations
+     *
+     * Total memory per player: ~few KB, regardless of track length.
+     */
+    async _processLoop(out) {
+        // Ensure the stream is in paused mode — we drive reads manually.
+        out.pause();
+
+        let firstChunk = true;
+        while (!this.stopped) {
+            // Pause gate — block here without consuming any data.
+            while (this.paused && !this.stopped) {
+                await this._waitForResume();
             }
-        } catch (err) {
-            // Destroyed/ended streams throw ERR_STREAM_DESTROYED — that\'s
-            // expected on stop(). Only surface genuine unexpected errors.
-            if (!this.stopped) {
-                const msg = err?.message ?? String(err);
-                const graceful =
-                    msg.includes("ERR_STREAM_DESTROYED") ||
-                    msg.includes("aborted") ||
-                    msg.includes("premature close");
-                if (!graceful) this.emit("error", err);
+            if (this.stopped) break;
+
+            const raw = await this._readChunk(out);
+            if (raw === null || this.stopped) break; // stream ended or stopped
+
+            const chunk = this._transformChunk(raw);
+            if (!chunk) continue; // transformer not ready yet (shouldn't happen)
+
+            if (firstChunk) {
+                firstChunk = false;
+                this.playing = true;
+                this.emit("startplay");
             }
+
+            const samples = new Int16Array(chunk.buffer, chunk.byteOffset, chunk.length / 2);
+            const frame   = new AudioFrame(
+                samples, this.SAMPLE_RATE, this.CHANNELS,
+                Math.trunc(samples.length / this.CHANNELS)
+            );
+
+            // captureFrame is real-time async — it resolves at exactly the
+            // right wall-clock time for the frame. This is what throttles the
+            // entire pipeline: FFmpeg can't produce more data than we consume.
+            await this.source.captureFrame(frame);
+            if (this.stopped) break;
+
+            this.playedOutSamples += samples.length / this.CHANNELS;
         }
 
-        // Loop exited — either track ended naturally or stop() was called.
         if (!this.stopped) this.stop();
     }
 
     async playStream(stream, options = {}) {
         this.emit("buffer");
-        this.originStream = stream;
-        // Mark as live. stop() keeps stopped=true after cleanup so redundant
-        // stop() calls are silent; playStream() is what reactivates the player.
+        this.originStream     = stream;
         this.stopped          = false;
         this.playing          = false;
         this.playedOutSamples = 0;
@@ -263,34 +275,31 @@ class MediaPlayer extends Media {
         if (useLoudnorm) fProc = fProc.audioFilters("loudnorm");
 
         fProc
-            .on("start", (cli) => console.log("[MediaPlayer] FFmpeg started:", cli))
-            .on("error", (err) => {
-                // Suppress intentional kills (stop/leave sends SIGKILL).
+            .on("start",    (cli) => console.log("[MediaPlayer] FFmpeg started:", cli))
+            .on("error",    (err) => {
                 if (this.stopped) return;
                 const msg = err?.message ?? String(err);
                 if (
-                    msg.includes("SIGKILL") ||
+                    msg.includes("SIGKILL")            ||
                     msg.includes("killed with signal") ||
-                    msg.includes("aborted") ||
+                    msg.includes("aborted")            ||
                     msg.includes("Input stream error")
                 ) return;
                 this.emit("error", err);
             })
             .on("codecData", (d) => { this.codecData = d; })
-            .on("end",       ()  => { /* _processLoop handles completion */ });
+            .on("end",       ()  => { /* _processLoop drives completion */ });
 
         this.fProc = fProc;
 
-        // Pipe FFmpeg output directly into the VolumeTransformer.
-        // Node.js stream piping handles backpressure: when captureFrame()
-        // blocks, the Transform buffer fills, FFmpeg stdout buffer fills,
-        // and FFmpeg itself throttles — no data accumulates in JS memory.
+        // Get the output stream and immediately switch it to paused mode
+        // so _processLoop controls every read.
         const out = fProc.pipe();
         this._ffmpegOut = out;
-        out.pipe(this.volumeTransformer);
 
-        // Start the async frame loop. Runs concurrently with the pipe.
-        this._processLoop(this.volumeTransformer);
+        // Drive playback. _processLoop keeps out in paused mode and only
+        // calls .read() after each captureFrame() — true demand-driven I/O.
+        this._processLoop(out);
     }
 }
 
