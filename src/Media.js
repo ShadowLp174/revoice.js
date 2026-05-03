@@ -143,17 +143,28 @@ class MediaPlayer extends Media {
     }
 
     stop(init = true) {
-        // Guard: if already stopped, don't re-emit "finish". Without this, the
-        // unconditional mediaPlayer.stop() call at the top of _doPlayNext fires
-        // a second "finish" event on an already-stopped player, which resolves
-        // the _streamViaRevoice promise for the *next* song before it plays
-        // a single frame — causing every song after the first to be skipped.
-        if (this.stopped && init) return;
+        // Only emit "finish" if we were actually in a playing state.
+        // _doPlayNext calls stop() at the top of every song transition to ensure
+        // cleanup — but if the song already ended naturally, stop() was already
+        // called internally, and a second "finish" would resolve _streamViaRevoice's
+        // once("finish") listener for the *next* song before it starts, causing
+        // every song after the first to be immediately skipped.
+        const wasPlaying = !this.stopped;
+
         this.stopped = true;
-        this.readyPlayPacket = false; // prevent new packets from being queued
+        this.readyPlayPacket = false;
         this.#cleanUp();
-        if (init) this.initValues();
-        this.emit("finish");
+
+        if (init) {
+            this.initValues();
+            // initValues() resets stopped→false (player is ready for reuse).
+            // Keep stopped=true until playStream() is called so any redundant
+            // stop() calls between song transitions don't re-emit "finish".
+            this.stopped = true;
+        }
+
+        // Only fire "finish" once per actual playback session.
+        if (wasPlaying) this.emit("finish");
     }
 
     destroy() {
@@ -251,6 +262,9 @@ class MediaPlayer extends Media {
         this.emit("buffer");
         this.originStream = stream;
         this.started = false;
+        // Mark as live — stop() sets stopped=true after initValues() so that
+        // redundant stop() calls between song transitions don't re-emit "finish".
+        // playStream() is the authoritative signal that playback has started.
         this.stopped = false;
         this.ffmpegFinished = false;
         this.playedOutSamples = 0;
