@@ -1,4 +1,5 @@
 const { AudioSource, LocalAudioTrack, TrackPublishOptions, TrackSource, AudioFrame } = require("@livekit/rtc-node");
+const fs = require("fs");
 const ffmpeg = require("fluent-ffmpeg");
 const fPath = require("ffmpeg-static");
 const { EventEmitter } = require("events");
