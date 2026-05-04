@@ -53,6 +53,7 @@ class MediaPlayer extends Media {
 
     this.isMediaPlayer = true;
     this.loudnessNormalisation = normalisation;
+    this.error = null; // should not reset after stop();
 
     this.initValues();
   }
@@ -63,7 +64,7 @@ class MediaPlayer extends Media {
 
 		this.paused = false;
 		this.playing = false;
-		this.started = false;
+    this.started = false;
 
 		this.chunks = [];
 		this.ffmpegChunks = [];
@@ -180,7 +181,12 @@ class MediaPlayer extends Media {
 		});
   }
 
-  async playStream(stream) {
+  /**
+   *
+   * @param {ReadableStream} stream
+   * @param {String[]} [inputOptions] An array of inputs options for ffmpeg. Only necessary if the data you are streaming doesn't contain any headers. See [fluent-ffmpeg](https://github.com/fluent-ffmpeg/node-fluent-ffmpeg#inputoptionsoption-add-custom-input-options) for the documentation.
+   */
+  async playStream(stream, inputOptions=[]) {
 		this.emit("buffer");
 		this.originStream = stream;
     this.started = false;
@@ -191,6 +197,7 @@ class MediaPlayer extends Media {
       .noVideo()
       .setFfmpegPath(fPath)
       .audioFilters("loudnorm")
+      .inputOptions(inputOptions)
       //.native() // TODO: check if necessary
       .outputOptions([
         `-f s16le`,
@@ -201,8 +208,10 @@ class MediaPlayer extends Media {
         console.log('Ffmpeg process started: ', cli)
       })
       .on("error", (err, stdout, stderr) => {
-				this.ffmpegFinished = true;
+        this.ffmpegFinished = true;
         // TODO: error handling
+        this.error = err;
+        this.stop();
       })
 			.on("codecData", (d) => {
 				this.codecData = d;

@@ -62,7 +62,7 @@ class Revoice extends EventEmitter {
     process.on("SIGINT", async () => {
       const promises = []
       for (let [k, v] of this.connections) {
-        this.promises.push(v.onSIGINT);
+        promises.push(v.onSIGINT);
       }
       await Promise.allSettled(promises);
 			process.exit();
@@ -252,7 +252,6 @@ class VoiceConnection extends EventEmitter {
 		const users = [];
     for (const [k, v] of participants) {
       const u = new User(v);
-      console.log(u);
 			u.connectedTo = this.channelId;
 			users.push(u);
 			this.voice.users.set(u.id, u);
@@ -303,7 +302,7 @@ class VoiceConnection extends EventEmitter {
 
   handleDisconnected() {
 		if (this.state !== Revoice.State.OFFLINE) this.updateState(Revoice.State.OFFLINE);
-    console.log("DIsconnected!");
+    console.log("Disconnected!");
   }
 }
 
