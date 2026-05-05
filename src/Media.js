@@ -2,305 +2,278 @@ const { AudioSource, LocalAudioTrack, TrackPublishOptions, TrackSource, AudioFra
 const ffmpeg = require("fluent-ffmpeg");
 const fPath = require("ffmpeg-static");
 const { EventEmitter } = require("events");
-const fs = require("fs");
 const prism = require("prism-media");
 
 /**
  * @class
- * @classdesc Basic class to process audio streams.
+ * @classdesc Basic class to process audio streams. As of 5a2fd7bcde9819c927157a965cfafdb8661f3e4e this doesn't have any functionality anymore and acts more like an interface.
  */
 class Media extends EventEmitter {
-    SAMPLE_RATE = 48000;
-    CHANNELS = 2;
-    id = null;
+  SAMPLE_RATE = 48000;
+  CHANNELS = 2;
+  id = null;
 
-    constructor() {
-        super();
-        this.id = Math.random().toString(36) + Date.now();
-        this.source = new AudioSource(this.SAMPLE_RATE, this.CHANNELS);
-        this.track = LocalAudioTrack.createAudioTrack("audio-" + this.id, this.source);
-    }
+  constructor() {
+                super();
 
-    playFile(path) {
-        if (!path) throw "You must specify a file to play!";
-        const stream = fs.createReadStream(path);
-        this.playStream(stream);
-    }
-    playStream(stream) {
-        if (!stream) throw "You must specify a stream to play!";
-        throw "Unsupported. Use MediaPlayer instead.";
-    }
+    this.id = Math.random().toString(36) + Date.now();
+
+    this.source = new AudioSource(this.SAMPLE_RATE, this.CHANNELS);
+    this.track = LocalAudioTrack.createAudioTrack("audio-" + this.id, this.source);
+  }
+
+        playFile(path) {
+                if (!path) throw "You must specify a file to play!";
+                const stream = fs.createReadStream(path);
+                this.playStream(stream);
+        }
+        playStream(stream) {
+                if (!stream) throw "You must specify a stream to play!";
+                throw "Unsupported. Use MediaPlayer instead.";
+        }
 }
 
 /**
  * @class
  * @augments Media
- * @description An advanced version of the Media class with media controls.
+ * @description An advanced version of the Media class. It also includes media controls like pausing and volume adjustment.
  *
- * Pipeline (demand-driven, nothing buffered in JS memory):
- *
- *   FFmpeg stdout (paused/Readable mode)
- *       → one chunk read manually via stream.read()
- *           → VolumeTransformer.write() / read one transformed chunk
- *               → AudioFrame → AudioSource.captureFrame()  (real-time async)
- *                   → loop back and read the next chunk
- *
- * FFmpeg stdout is kept in paused mode. We call .read() only after
- * captureFrame() resolves, so FFmpeg is throttled to exactly playback speed
- * and nothing accumulates in memory regardless of track length.
+ * @property {number} seconds - The amount of seconds passed during playback.
+ * @property {string} currTimestamp - The current timestamp in ffmpeg format `hh:mm:ss`.
  */
 class MediaPlayer extends Media {
-    constructor(normalisation = true) {
-        super();
-        this.isMediaPlayer = true;
-        this.loudnessNormalisation = normalisation;
-        this.initValues();
-    }
+        /**
+         * @description Initiates the MediaPlayer instance.
+         * @param {boolean} normalisation=true Wether to pass the `loudnorm` flag to FFmpeg.
+         *
+         * @return {MediaPlayer}            The new instance.
+         */
+  constructor(normalisation=true) {
+    super();
 
-    initValues() {
-        this.ready            = true;
-        this.volCache         = null;
-        this.paused           = false;
-        this.playing          = false;
-        this.stopped          = false;
-        this.playedOutSamples = 0;
-        this.codecData        = null;
-        this.originStream     = null;
-        this.fProc            = null;
-        this._ffmpegOut       = null;
-        this._unpauseResolve  = null;
+    this.isMediaPlayer = true;
+    this.loudnessNormalisation = normalisation;
+    this.error = null; // should not reset after stop();
 
-        this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: 1 });
-    }
+    this.initValues();
+  }
 
-    pause() {
-        if (this.paused) return;
-        this.paused = true;
-        this.emit("pause");
-    }
+        initValues() {
+                this.ready = true;
+                this.volCache = null;
 
-    resume() {
-        if (!this.paused) return;
-        this.paused = false;
-        if (this._unpauseResolve) {
-            this._unpauseResolve();
-            this._unpauseResolve = null;
-        }
-        this.emit("unpause");
-    }
+                this.paused = false;
+                this.playing = false;
+    this.started = false;
 
-    setVolume(v = 1) {
-        this.volCache = v;
-        return this.volumeTransformer.setVolume(v);
-    }
+                this.chunks = [];
+                this.ffmpegChunks = [];
+                this.readyPlayPacket = true;
+                this.ffmpegFinished = false;
+                this.playedOutSamples = 0;
+                this.codecData = null;
 
-    _waitForResume() {
-        return new Promise(resolve => { this._unpauseResolve = resolve; });
-    }
+                this.originStream = null;
+                this.fProc = null;
 
-    #cleanUp() {
-        try { this._ffmpegOut?.destroy(); }       catch (_) {}
-        this._ffmpegOut = null;
-        try { this.originStream?.destroy(); }     catch (_) {}
-        if (this.fProc) {
-            try { this.fProc.kill(); }            catch (_) {}
-        }
-        try { this.volumeTransformer.destroy(); } catch (_) {}
-        if (this._unpauseResolve) {
-            this._unpauseResolve();
-            this._unpauseResolve = null;
-        }
-    }
-
-    stop(init = true) {
-        const wasPlaying = !this.stopped;
-        this.stopped = true;
-        this.#cleanUp();
-        if (init) {
-            this.initValues();
-            this.stopped = true; // survive initValues() reset
-        }
-        if (wasPlaying) this.emit("finish");
-    }
-
-    destroy() { return this.stop(false); }
-
-    get duration()        { return this.codecData?.duration || 0; }
-    get seconds()         { return this.playedOutSamples / this.SAMPLE_RATE; }
-    get localAudioTrack() { return this.track; }
-
-    get currTimestamp() {
-        const s   = Math.floor(this.seconds);
-        const h   = Math.floor(s / 3600);
-        const m   = Math.floor((s % 3600) / 60);
-        const sec = s % 60;
-        return [h, m, sec].map(n => String(n).padStart(2, "0")).join(":");
-    }
-
-    get publishOptions() {
-        const options = new TrackPublishOptions();
-        options.source = TrackSource.SOURCE_MICROPHONE;
-        return options;
-    }
-
-    async publishToRoom(room) {
-        await room.localParticipant.publishTrack(this.track, this.publishOptions);
-    }
-
-    /**
-     * Read exactly one chunk from a stream that is in paused mode.
-     * Returns null when the stream ends.
-     */
-    _readChunk(readable) {
-        return new Promise((resolve) => {
-            // Try a synchronous read first — data may already be in the
-            // stream's tiny internal highWaterMark buffer (default 16 KB).
-            const chunk = readable.read();
-            if (chunk !== null) return resolve(chunk);
-
-            // Nothing available yet — wait for the next "readable" event,
-            // which fires when at least one chunk is ready, then read it.
-            const onReadable = () => {
-                cleanup();
-                resolve(readable.read());
-            };
-            const onEnd = () => { cleanup(); resolve(null); };
-            const onClose = () => { cleanup(); resolve(null); };
-            const onError = () => { cleanup(); resolve(null); };
-
-            const cleanup = () => {
-                readable.off("readable", onReadable);
-                readable.off("end",      onEnd);
-                readable.off("close",    onClose);
-                readable.off("error",    onError);
-            };
-
-            readable.once("readable", onReadable);
-            readable.once("end",      onEnd);
-            readable.once("close",    onClose);
-            readable.once("error",    onError);
-        });
-    }
-
-    /**
-     * Write one chunk into the VolumeTransformer and read back the
-     * transformed output synchronously. prism-media's VolumeTransformer
-     * is a synchronous Transform — one write always produces one read.
-     */
-    _transformChunk(chunk) {
-        this.volumeTransformer.write(chunk);
-        return this.volumeTransformer.read();
-    }
-
-    /**
-     * Demand-driven playback loop.
-     *
-     * We keep FFmpeg's output stream in paused (non-flowing) mode and call
-     * .read() only after captureFrame() has returned. This means:
-     *   - FFmpeg stdout OS buffer: at most ~64 KB (kernel default pipe size)
-     *   - VolumeTransformer buffer: at most one chunk (~few KB, highWaterMark)
-     *   - JS heap: nothing stored between iterations
-     *
-     * Total memory per player: ~few KB, regardless of track length.
-     */
-    async _processLoop(out) {
-        // Ensure the stream is in paused mode — we drive reads manually.
-        out.pause();
-
-        let firstChunk = true;
-        while (!this.stopped) {
-            // Pause gate — block here without consuming any data.
-            while (this.paused && !this.stopped) {
-                await this._waitForResume();
-            }
-            if (this.stopped) break;
-
-            const raw = await this._readChunk(out);
-            if (raw === null || this.stopped) break; // stream ended or stopped
-
-            const chunk = this._transformChunk(raw);
-            if (!chunk) continue; // transformer not ready yet (shouldn't happen)
-
-            if (firstChunk) {
-                firstChunk = false;
-                this.playing = true;
-                this.emit("startplay");
-            }
-
-            const samples = new Int16Array(chunk.buffer, chunk.byteOffset, chunk.length / 2);
-            const frame   = new AudioFrame(
-                samples, this.SAMPLE_RATE, this.CHANNELS,
-                Math.trunc(samples.length / this.CHANNELS)
-            );
-
-            // captureFrame is real-time async — it resolves at exactly the
-            // right wall-clock time for the frame. This is what throttles the
-            // entire pipeline: FFmpeg can't produce more data than we consume.
-            await this.source.captureFrame(frame);
-            if (this.stopped) break;
-
-            this.playedOutSamples += samples.length / this.CHANNELS;
+                this.volumeTransformer = new prism.VolumeTransformer({ type: "s16le", volume: 1 });
+                this.volumeTransformer.once("data", () => {
+                        this.playing = true;
+                        this.emit("startplay");
+                })
         }
 
-        if (!this.stopped) this.stop();
-    }
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
 
-    async playStream(stream, options = {}) {
-        this.emit("buffer");
-        this.originStream     = stream;
-        this.stopped          = false;
-        this.playing          = false;
-        this.playedOutSamples = 0;
+    this.emit("pause");
+  }
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
 
-        const isRawPcm = options.rawPcm === true;
+    if (this.readyPlayPacket) this.playOutPacket();
+    this.emit("unpause");
+  }
+  setVolume(v=1) {
+    return this.volumeTransformer.setVolume(v);
+  }
 
-        let fProc = ffmpeg(stream).noVideo().setFfmpegPath(fPath);
-
-        if (isRawPcm) {
-            fProc = fProc.inputOptions([
-                "-f s16le",
-                `-ar ${this.SAMPLE_RATE}`,
-                `-ac ${this.CHANNELS}`
-            ]);
+        #cleanUp() {
+                this.originStream?.destroy();
+                if (this.ffmpegFinished) this.fProc.kill(); // "SIGSTOP" to suspend
+                this.volumeTransformer.destroy();
         }
 
-        fProc = fProc.outputOptions([
-            "-f s16le",
-            `-ar ${this.SAMPLE_RATE}`,
-            `-ac ${this.CHANNELS}`
-        ]);
+        stop(init=true) {
+                this.readyPlayPacket = false; // prevent new packets from being played out
 
-        const useLoudnorm = isRawPcm ? false
-            : (options.loudnorm !== undefined ? options.loudnorm : this.loudnessNormalisation);
-        if (useLoudnorm) fProc = fProc.audioFilters("loudnorm");
+                this.#cleanUp();
 
-        fProc
-            .on("start",    (cli) => console.log("[MediaPlayer] FFmpeg started:", cli))
-            .on("error",    (err) => {
-                if (this.stopped) return;
-                const msg = err?.message ?? String(err);
-                if (
-                    msg.includes("SIGKILL")            ||
-                    msg.includes("killed with signal") ||
-                    msg.includes("aborted")            ||
-                    msg.includes("Input stream error")
-                ) return;
-                this.emit("error", err);
-            })
-            .on("codecData", (d) => { this.codecData = d; })
-            .on("end",       ()  => { /* _processLoop drives completion */ });
+                if (init) this.initValues();
 
-        this.fProc = fProc;
+                this.emit("finish");
+        }
+        destroy() {
+                return this.stop(false);
+        }
 
-        // Get the output stream and immediately switch it to paused mode
-        // so _processLoop controls every read.
-        const out = fProc.pipe();
-        this._ffmpegOut = out;
+        get duration() {
+                return this.codecData?.duration || 0;
+        }
+        get currTimestamp() {
+                const sec_num = this.seconds();
+                var hours = Math.floor(sec_num / 3600);
+                var minutes = Math.floor((sec_num - (hours * 3600)) / 60);
+                var seconds = sec_num - (hours * 3600) - (minutes * 60);
 
-        // Drive playback. _processLoop keeps out in paused mode and only
-        // calls .read() after each captureFrame() — true demand-driven I/O.
-        this._processLoop(out);
+                if (hours < 10) { hours = "0" + hours; }
+                if (minutes < 10) { minutes = "0" + minutes; }
+                if (seconds < 10) { seconds = "0" + seconds; }
+                return hours + ':' + minutes + ':' + seconds;
+        }
+        get seconds() {
+                return this.playedOutSamples / this.SAMPLE_RATE;
+        }
+
+  get localAudioTrack() {
+    return this.track;
+  }
+  get publishOptions() {
+    const options = new TrackPublishOptions();
+    options.source = TrackSource.SOURCE_MICROPHONE;
+    return options;
+  }
+        async publishToRoom(room) {
+                await room.localParticipant.publishTrack(this.track, this.publishOptions);
+        }
+
+  async playOutPacket() {
+                return new Promise((res) => {
+                        if (this.chunks.length === 0) return res(this.readyPlayPacket = true);
+                        this.readyPlayPacket = false;
+
+                        const c = this.chunks.shift();
+
+                        this.volumeTransformer.once("data", async (chunk) => {
+                                const samples = new Int16Array(
+                                        chunk.buffer,
+                                        chunk.byteOffset,
+                                        chunk.length / 2 // chunk.length is in bytes
+                                );
+                                const frame = new AudioFrame(
+                                        samples,
+                                        this.SAMPLE_RATE,
+                                        this.CHANNELS,
+                                        Math.trunc(samples.length / this.CHANNELS)
+                                )
+
+                                await this.source.captureFrame(frame);
+                                this.playedOutSamples += samples.length / this.CHANNELS;
+
+                                if (this.chunks.length > 0 && !this.paused) return res(this.playOutPacket());
+                                this.readyPlayPacket = true;
+                                if (this.chunks.length === 0 && this.ffmpegFinished) this.stop();
+                                return res();
+                        });
+                        this.volumeTransformer.write(c);
+                });
+  }
+
+  /**
+   * Play an audio stream through FFmpeg and publish to the LiveKit room.
+   *
+   * @param {ReadableStream} stream              The audio stream to play.
+   * @param {String[]|Object} [inputOptions=[]]  FFmpeg input options.
+   *   - If an **array**, passed directly as fluent-ffmpeg input options
+   *     (backward-compatible with upstream API).
+   *   - If an **object**, the following keys are recognised:
+   *     - `rawPcm` {boolean}  — prepend raw PCM format flags
+   *       (`-f s16le -ar 48000 -ac 2`) to the input options.
+   *     - `audioFilter` {string} — FFmpeg audio filter chain applied
+   *       after loudnorm (replaces it when rawPcm is true).
+   *     - `inputOptions` {String[]} — additional input options appended
+   *       after the raw PCM flags (if any).
+   */
+  async playStream(stream, inputOptions=[]) {
+                this.emit("buffer");
+                this.originStream = stream;
+    this.started = false;
+
+    this.ffmpegFinished = false;
+                this.playedOutSamples = 0;
+
+    // ── Normalise the 2nd parameter ──────────────────────────────────────
+    let rawInputOpts = [];
+    let audioFilter  = "";
+    let isRawPcm     = false;
+
+    if (Array.isArray(inputOptions)) {
+      // Legacy upstream API: playStream(stream, ["-f s16le", "-ar 48000"])
+      rawInputOpts = inputOptions;
+    } else if (inputOptions && typeof inputOptions === "object") {
+      isRawPcm     = !!inputOptions.rawPcm;
+      audioFilter  = inputOptions.audioFilter || "";
+      rawInputOpts = Array.isArray(inputOptions.inputOptions)
+          ? inputOptions.inputOptions
+          : [];
     }
+
+    // ── Build final input options (prepend raw PCM flags if needed) ──────
+    const finalInputOpts = [];
+    if (isRawPcm) {
+      finalInputOpts.push("-f", "s16le", "-ar", String(this.SAMPLE_RATE), "-ac", String(this.CHANNELS));
+    }
+    finalInputOpts.push(...rawInputOpts);
+
+    // ── Build audio filter chain ─────────────────────────────────────────
+    const afParts = [];
+    if (!isRawPcm && this.loudnessNormalisation) {
+      afParts.push("loudnorm");
+    }
+    if (audioFilter) {
+      afParts.push(audioFilter);
+    }
+
+    // ── Assemble fluent-ffmpeg command ───────────────────────────────────
+    const fProc = ffmpeg(stream)
+      .noVideo()
+      .setFfmpegPath(fPath)
+      .inputOptions(finalInputOpts);
+
+    if (afParts.length > 0) {
+      fProc.audioFilters(afParts.join(","));
+    }
+
+    fProc
+      .outputOptions([
+        `-f s16le`,
+        `-ar ${this.SAMPLE_RATE}`,
+        `-ac ${this.CHANNELS}`
+      ])
+      .on("start", (cli) => {
+        console.log(`[MediaPlayer] FFmpeg started: ${cli}`)
+      })
+      .on("error", (err, stdout, stderr) => {
+        this.ffmpegFinished = true;
+        // TODO: error handling
+        this.error = err;
+        this.stop();
+      })
+                        .on("codecData", (d) => {
+                                this.codecData = d;
+                        })
+      .on("end", () => {
+        this.ffmpegFinished = true;
+                                console.log("ffmpeg finished");
+      });
+                this.fProc = fProc;
+    fProc.pipe().on("data", (chunk) => {
+      this.chunks.push(chunk)
+      if (this.readyPlayPacket && !this.paused) return this.playOutPacket();
+    })
+  }
 }
 
-module.exports = { MediaPlayer, Media };
+module.exports = { MediaPlayer, Media }
