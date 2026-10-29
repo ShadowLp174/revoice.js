@@ -5,9 +5,9 @@
     "readme": "README.md"
   },
   "source": {
-    "include": ["./src"],
+    "include": ["./src", "./src/engine", "./src/dsp", "./src/adapters"],
     "includePattern": ".+\\.js(doc|x)?$",
-    "excludePattern": "(^|\\/|\\\\)_"
+    "excludePattern": "(^|\\/|\\\\)_|V1\\.js$"
   },
   "sourceType": "module",
   "tags": {
