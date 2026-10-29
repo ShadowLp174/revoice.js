@@ -55,7 +55,6 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           # Uploads ONLY the generated docs folder instead of the whole repository ('.')
-          # Note: Ensure your jsdoc.json sets "opts": { "destination": "./docs" }
           path: './docs'
 
       - name: Deploy to GitHub Pages

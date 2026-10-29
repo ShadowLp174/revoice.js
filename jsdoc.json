@@ -4,7 +4,13 @@
     "destination": "./docs",
     "readme": "README-docs.md",
     "tutorials": "./tutorials",
-    "siteName": "Revoice.js Documentation"
+    "siteName": "Revoice.js Documentation",
+    "theme_opts": {
+      "base_url": "/revoice.js/"
+    }
+  },
+  "cleanJsdocTheme": {
+    "basePath": "/revoice.js/"
   },
   "source": {
     "include": ["./src", "./src/engine", "./src/dsp", "./src/adapters"],
