@@ -3,6 +3,7 @@ const { API } = require("revolt-api");
 const User = require("./User");
 const LiveKitAdapter = require("./adapters/LiveKitAdapter.js");
 const BaseTransportAdapter = require("./adapters/BaseTransportAdapter.js");
+const { Media } = require("./Media");
 
 if (!process.env.LIVEKIT_LOG_LEVEL) {
   process.env.LIVEKIT_LOG_LEVEL = "warn";
@@ -30,6 +31,7 @@ if (!process.env.LIVEKIT_LOG_LEVEL) {
 class Revoice extends EventEmitter {
   client;
   api;
+  /** @type {Map<string, VoiceConnection>} */
   connections;
   state;
 
@@ -74,6 +76,7 @@ class Revoice extends EventEmitter {
     }
 
     this.connections = new Map();
+    /** @type {Map<string, User>} */
     this.users = new Map();
 
     this.state = Revoice.State.OFFLINE;
@@ -199,6 +202,9 @@ class Revoice extends EventEmitter {
     });
   }
 
+  /**
+   * @param {string} channelId
+   */
   getVoiceConnection(channelId) {
     return this.connections.get(channelId);
   }
@@ -208,6 +214,9 @@ class Revoice extends EventEmitter {
     this.emit("state", state);
   }
 
+  /**
+   * @param {string} id
+   */
   getUser(id) {
     if (!this.users.has(id)) return false;
     const user = this.users.get(id);
@@ -217,6 +226,9 @@ class Revoice extends EventEmitter {
     return { user, connection };
   }
 
+  /**
+   * @param {string} id
+   */
   knowsUser(id) {
     return this.users.has(id);
   }
@@ -234,6 +246,16 @@ class VoiceConnection extends EventEmitter {
   voice;
   channelId;
 
+  /**
+   *
+   * @param {string} channelId
+   * @param {Revoice} voice
+   * @param {Object} opts
+   * @param {string} opts.url
+   * @param {string} opts.token
+   * @param {boolean|number} opts.leaveOnEmpty
+   * @param {typeof BaseTransportAdapter} opts.adapterClass The class, not the instance
+   */
   constructor(channelId, voice, opts = {}) {
     super();
     this.channelId = channelId;
@@ -243,6 +265,7 @@ class VoiceConnection extends EventEmitter {
     this.token = opts.token;
 
     this.media = null;
+    /** @type {User[]} */
     this.users = [];
     this.preferredVolume = 1;
 
@@ -399,6 +422,9 @@ class VoiceConnection extends EventEmitter {
     return await this.leave();
   }
 
+  /**
+   * @param {Media} media
+   */
   async play(media) {
     this.updateState(!media.isMediaPlayer ? Revoice.State.UNKNOWN : Revoice.State.BUFFERING);
 

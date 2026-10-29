@@ -2,6 +2,9 @@ const EventEmitter = require("events");
 const { WebSocket } = require("ws");
 const User = require("./User.js");
 
+/**
+ * @deprecated
+ */
 class Signaling {
   constructor(apiClient, channelId, reconnectTimeout=3000) {
     this.client = apiClient;

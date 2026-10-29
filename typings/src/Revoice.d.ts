@@ -8,7 +8,10 @@ export = Revoice;
 /**
  * revolt-api configuration object. May be used for self-hosted revolt instances. @see {@link https://github.com/insertish/oapi#example} The last example for further information.
  * @typedef {Object} APIConfig
- * @property {String} baseURL The base url of the api of your revolt instance
+ * @property {String} [baseURL] The base url of the api of your revolt instance
+ * @property {String} [logLevel="warn"] LiveKit log level ("debug", "info", "warn", "error")
+ * @property {typeof BaseTransportAdapter} [adapterClass] Optional custom voice transport adapter class
+ * @property {Object} [adapterOptions] Optional options passed to the transport adapter
  */
 /**
  * @class
@@ -16,7 +19,6 @@ export = Revoice;
  * @augments EventEmitter
  */
 declare class Revoice extends EventEmitter {
-    static createDevice(): Device;
     static State: {
         OFFLINE: string;
         IDLE: string;
@@ -31,139 +33,127 @@ declare class Revoice extends EventEmitter {
         NOT_A_VC: string;
         VC_ERROR: string;
     };
+    static VoiceConnection: any;
+    static BaseTransportAdapter: typeof BaseTransportAdapter;
+    static LiveKitAdapter: typeof LiveKitAdapter;
     static uid(): string;
     /**
      * @description Initiate a new Revoice instance
      *
-     * @param  {(Login|string)} loginData The way to login. If you're using a bot use your token, otherwise specify an email and password.
-     * @param {(APIConfig)} [apiConfig={}] A configuration object for revolt-api. @see {@link https://github.com/insertish/oapi#example} The last example for further information
+     * @param {(Login|string)} loginData The way to login. If you're using a bot use your token, otherwise specify an email and password.
+     * @param {(APIConfig)} [apiConfig={}] A configuration object for revolt-api and Revoice options.
      * @return {Revoice}
      */
     constructor(loginData: (Login | string), apiConfig?: (APIConfig));
-    session: any;
-    signals: Map<any, any>;
-    signaling: Signaling;
-    transports: Map<any, any>;
-    devices: Map<any, any>;
-    connected: any[];
-    connections: Map<any, any>;
-    users: Map<any, any>;
-    state: string;
-    login(data: any, config: any): Promise<API>;
+    client: any;
     api: any;
+    /** @type {Map<string, VoiceConnection>} */
+    connections: Map<string, VoiceConnection>;
+    state: string;
+    adapterClass: typeof BaseTransportAdapter | typeof LiveKitAdapter;
+    adapterOptions: any;
+    /** @type {Map<string, User>} */
+    users: Map<string, User>;
+    _sigintHandler: () => Promise<never>;
+    login(data: any, config?: {}): Promise<any>;
+    session: any;
     connect(config: any): Promise<void>;
-    updateState(state: any): void;
     /**
-     * @typedef UserData
-     * @property {User} user The Revoice user object associated with the user
-     * @property {VoiceConnection} connection The voice connection that is connected to the user
+     * Join a Stoat voice channel.
+     * @param {string} channelId
+     * @param {boolean|number} [leaveIfEmpty=false]
+     * @param {Object} [joinOptions={}]
+     * @param {string} [joinOptions.node="worldwide"]
+     * @param {string} [joinOptions.token] Pre-fetched call token (optional)
+     * @param {string} [joinOptions.url] Pre-fetched call WebSocket URL (optional)
+     * @returns {Promise<VoiceConnection>}
      */
+    join(channelId: string, leaveIfEmpty?: boolean | number, joinOptions?: {
+        node?: string;
+        token?: string;
+        url?: string;
+    }): Promise<VoiceConnection>;
     /**
-     * @description Retrieve the user object
-     *
-     * @param  {string} id The id of the user
-     * @return {UserData} An object containing the Revoice user object and the voice connection, the user is in.
-     */
-    getUser(id: string): {
-        /**
-         * The Revoice user object associated with the user
-         */
-        user: User;
-        /**
-         * The voice connection that is connected to the user
-         */
-        connection: VoiceConnection;
-    };
-    knowsUser(id: any): boolean;
-    /**
-     * @description Join a specified channel
-     * @example
-     * voice.join("channel", 60).then(connection => { // leave after 60 seconds of inactivity
-     *   const player = new MediaPlayer();
-     *   connection.play(player);
-     *   player.playFile("audio.mp3");
-     * });
-     *
-     * @param  {string} channelId        The id of the voice channel you want the bot to join
-     * @param  {(false|number)} leaveIfEmpty=false Specifies the amount of time in sconds, after which the bot leaves an empty voice channel. If this is set to `false`, the bot will stay unless told to leave
-     * @return {Promise<VoiceConnection>} A promise containing the resulting VoiceConnection for this channel.
-     */
-    join(channelId: string, leaveIfEmpty?: (false | number)): Promise<VoiceConnection>;
-    /**
-     * @description Retrieve the VoiceConnection object for a specified voice channel
-     *
-     * @param  {string} channelId The id of the voice channel
-     * @return {VoiceConnection}           The voice connection object
+     * @param {string} channelId
      */
     getVoiceConnection(channelId: string): VoiceConnection;
+    updateState(state: any): void;
+    /**
+     * @param {string} id
+     */
+    getUser(id: string): false | {
+        user: User;
+        connection?: undefined;
+    } | {
+        user: User;
+        connection: VoiceConnection;
+    };
+    /**
+     * @param {string} id
+     */
+    knowsUser(id: string): boolean;
 }
 declare namespace Revoice {
     export { Login, APIConfig };
 }
-import EventEmitter = require("events");
-import Signaling = require("./Signaling.js");
-import { API } from "revolt-api";
+import { EventEmitter } from "events";
 /**
- * @class
- * @classdesc Operates media sources and users in voice channels
+ * @class VoiceConnection
+ * @classdesc Operates media sources and users in voice channels using a pluggable transport adapter
+ * @augments EventEmitter
  */
 declare class VoiceConnection extends EventEmitter {
-    constructor(channelId: any, voice: any, opts: any);
-    voice: any;
-    channelId: any;
-    users: any[];
-    device: any;
-    signaling: any;
-    leaveTimeout: any;
-    initialConnect: boolean;
-    media: any;
-    updateState(state: any): void;
-    state: any;
     /**
-     * @description Get all the users associated with this voice connection
      *
-     * @return {User[]} An array containing all the User objects
+     * @param {string} channelId
+     * @param {Revoice} voice
+     * @param {Object} opts
+     * @param {string} opts.url
+     * @param {string} opts.token
+     * @param {boolean|number} opts.leaveOnEmpty
+     * @param {typeof BaseTransportAdapter} opts.adapterClass The class, not the instance
      */
-    getUsers(): User[];
-    /**
-     * @description Check if a user is connected to this voice channel
-     *
-     * @param  {string} userId The id of the user
-     * @return {boolean}        Wether the user is in the voice channel
-     */
-    isConnected(userId: string): boolean;
-    setupSignaling(): void;
+    constructor(channelId: string, voice: Revoice, opts?: {
+        url: string;
+        token: string;
+        leaveOnEmpty: boolean | number;
+        adapterClass: typeof BaseTransportAdapter;
+    });
+    adapter: BaseTransportAdapter | LiveKitAdapter;
+    url: string;
+    token: string;
+    voice: import("./Revoice");
+    channelId: string;
+    media: Media;
+    /** @type {User[]} */
+    users: User[];
+    preferredVolume: number;
     leaving: NodeJS.Timeout;
-    initLeave(): void;
-    initTransports(data: any): void;
-    sendTransport: any;
+    leaveTimeout: number | boolean;
+    state: string;
+    get room(): any;
+    onSIGINT(): Promise<void>;
+    updateState(state: any): void;
+    getUsers(): User[];
     resetUser(user: any): void;
+    handleJoin(participant: any): void;
+    handleLeave(participant: any): void;
+    initLeave(): void;
+    isConnected(): boolean;
+    get connected(): boolean;
+    connect(): Promise<void>;
+    disconnect(): Promise<void>;
+    leave(): Promise<void>;
+    destroy(): Promise<void>;
     /**
-     * @description Attach a Media object to this connection
-     *
-     * @example
-     * const connection = voice.getVoiceConnection("someChannelId");
-     * const player = new MediaPlayer();
-     * connection.play(player);
-     *
-     * player.playFile("./audio.mp3");
-     *
-     * @param  {(Media|MediaPlayer)} media The media object that should be attached
-     * @return {void}
+     * @param {Media} media
      */
-    play(media: (Media | MediaPlayer)): void;
-    producer: any;
-    closeTransport(): Promise<any>;
-    disconnect(): Promise<any>;
-    destroy(): Promise<any>;
-    /**
-     * @description Leave the voice channel
-     * @async
-     * @return {void}
-     */
-    leave(): void;
+    play(media: Media): Promise<void>;
+    handleDisconnected(): void;
 }
-import { Device } from "msc-node";
+import BaseTransportAdapter = require("./adapters/BaseTransportAdapter.js");
+import LiveKitAdapter = require("./adapters/LiveKitAdapter.js");
+import User = require("./User");
 /**
  * Login information required, when you want to use a user account and not a bot. Please note that an account with MFA will not work.
  */
@@ -184,6 +174,19 @@ type APIConfig = {
     /**
      * The base url of the api of your revolt instance
      */
-    baseURL: string;
+    baseURL?: string;
+    /**
+     * LiveKit log level ("debug", "info", "warn", "error")
+     */
+    logLevel?: string;
+    /**
+     * Optional custom voice transport adapter class
+     */
+    adapterClass?: typeof BaseTransportAdapter;
+    /**
+     * Optional options passed to the transport adapter
+     */
+    adapterOptions?: any;
 };
+import { Media } from "./Media";
 //# sourceMappingURL=Revoice.d.ts.map

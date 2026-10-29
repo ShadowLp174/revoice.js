@@ -4,18 +4,31 @@ A Node.js package allowing bots (or selfbots) to connect to voice channels on th
 
 #### Features:
 
-- Audio Playback
+- Custom audio pipeline
+  - If raw 48khz 2-channel PCM audio is piped in, Processing is done entirely in JS, eliminating performance-overhead through FFmpeg (like in previous versions)
+  - Multi-threaded for improved performance (using worker threads)
+  - Implemented pipeline steps:
+    1. MixerNode: joins additional audio streams (overlays) into the primary stream of the pipeline
+    2. Filter/EQNode
+    3. LoudnormNode: Automatic gain control, RMS loudnorm normalising and a soft-knee peak limiter
+    4. Custom Node Entry point: Custom audio processing nodes can be inserted here. Node == Function modifying a given Float32 buffer frame
+    5. VolumeNode
 - Pausing/Resuming Playback
-- Adjusting volume
 - User Events (joining/leaving)
+- Audio Reception (rudimentary, native QoL features such as speaker detection are not implemented *yet*)
+  - For usage examples see [tutorials/AudioReception.md](./tutorials/AudioReception.md)
 
 This package is still in development. If you need a certain feature currently not implemented, please open an issue and let me know about it. I will see what I can do :)
 
 ## Livekit Update
 
 Stoat, formerly Revolt, has updated to a new voice system called Livekit. Revoice.js has been updated to support this and is a lot more stable now.  
-The rewrite was made with backwards-compatibility in mind so any programs using Revoice written before the switch should still work after updating to the newest Revoice version. However, minor issues may arise (such as `media.playbackPaused` being removed in favour of `media.paused`).  
+The rewrite was made with backwards-compatibility in mind so any programs using Revoice written before the switch should still work after updating to the newest Revoice version. However, minor issues may arise (such as `media.playbackPaused` being phased out in favour of `media.paused`).
 To connect to Stoat instances still using Vortex, the old `Revoice` and `MediaPlayer` are still accessible by importing them through `require("revoice.js").legacy`.
+
+> [!NOTE]
+> Stoat does not support the full audio quality used by Revoice at the moment.
+> As the time of writing Stoat does not even support stereo audio, but that is most likely subject to change in the very near future.
 
 ## Installation
 
@@ -33,42 +46,49 @@ Example:
 
 If you want to see a working music bot using revoice, check out [Remix](https://github.com/remix-bot/revolt)!
 
-```JavaScript
+```javascript
 const { Revoice, MediaPlayer } = require("revoice.js");
 const fs = require("fs");
 
-const revoice = new Revoice("the-token-of-your-bot");
-const connection = await revoice.join("the-voice-channel-id");
-const media = new MediaPlayer();
-connection.on("join", () => {
-  connection.play(media); // playing audio does only work after the the bot joined the voice channel
+async function main() {
+  const revoice = new Revoice("the-token-of-your-bot");
+  
+  // join the voice channel
+  const connection = await revoice.join("the-voice-channel-id");
 
-  // IMPORTANT: If you want to hear music,
-  // you have to call connection.play(media)
-  // BEFORE you start playing something in the media player
+  // initialize MediaPlayer with v2 options (Worker thread offloading and Loudnorm enabled)
+  const media = new MediaPlayer({
+    normalisation: true,
+    useWorker: true,
+    volume: 1.0,
+  });
 
-  media.playFile("./assets/some-nice-song.mp3");
-  // or something like the following:
-  media.playStream(fs.createReadStream("./assets/some-nice-song.mp3"));
+  connection.on("join", async () => {
+    // 1. Attach and publish the media player to the voice connection
+    await connection.play(media);
 
-  // you don't have to store the voice connection, you can retrieve it if you have the id of the voice channel like this:
-  const con = revoice.getVoiceConnection("someChannelId");
+    // 2. Play a file or stream
+    await media.playFile("./assets/some-nice-song.mp3");
+    // Alternatively for streams:
+    // await media.playStream(fs.createReadStream("./assets/some-nice-song.mp3"));
 
-  // ... pause it
-  media.pause();
+    // Optional v2 features:
+    // media.setFilter("bassboost"); // EQ preset
+    // media.setVolume(0.8);          // Volume adjustment
+    // media.playOverlay("./assets/effect.mp3", { volume: 0.5, duckPrimary: true }); // Overlay audio
+  });
+}
 
-  // ... resume it later
-  media.resume();
-});
+main().catch(console.error);
 ```
 
 **TODO**:
 
 - [X] Play/Pause for the media class
 - [X] Non-voice events like UserJoined and roominfo
-- [ ] Audio Level Normalisation
-- [ ] Audio reception
-- [ ] Error Handling; Right now, you have to take care of things like stopping the music if you start to play another song while one is playing
+- [X] Audio Level Normalisation
+- [X] Audio Reception 
+- [ ] Advanced audio reception features
 
 *Disclamer: I might have forgotten some things on the list and thus it might be extended. Feel free to open issues to suggest new features :)*
 
@@ -77,100 +97,6 @@ connection.on("join", () => {
 You can pass the configuration data for revolt-api and thus connect it to a self-hosted instance.
 For the data you can pass, see [oapi](https://github.com/insertish/oapi#example)
 
-<!--### Rejoice for Revoice!<!--lol-->
 ## Documentation
 
 For the documentation, please have a look at the pages deployment: https://shadowlp174.github.io/revoice.js/docs
-
-<!--
-### Revoice Client
-
-#### Properties/Methods:
-
-- **`on(event, callback)`**: Equally to EventEmitter.on, for supported events refer to: [The Events section](#Events)
-- **`once(event, callback)`**: Equally to EventEmitter.once, refer to `on()`
-- **`join(channelId)`**: Connect to a voice channel;  `channelId` typeof `String`
-- **`getVoiceConnection(channelId)`**: Returns the voice connection to the given channel; Params: `channelId` typeof `String`
-
-### VoiceConnection
-
-#### Properties/Methods:
-
-- **`play(media)`**: Stream a [MediaPlayer](#MediaPlayer)(Or Media) object to the current voice channel
-- **`leave()`**: Leave the voice channel and destroy the connection
-
-#### Events:
-
-- **state**:
-  - Data: `typeof Revoice.State`;
-  - This event gets fired whenever the current state changes. The possible states are:
-    - **State.OFFLINE**: The bot hasn't joined any channel yet
-    - **State.IDLE**: The bot is in a voice channel but isn't doesn't play anything
-    - **State.JOINING**: The bot is currently in the join process
-    - **State.PLAYING**: The bot is in a voice channel and transmitting sound
-    - **State.BUFFERING**: The bot is in a voice channel and there is a stream with audio buffering
-    - **State.PAUSED**: The bot is in a voice channel and the audio has been paused
-    - **State.UNKNOWN**: The bot is in a voice channel and _might_ be playing something. This occurs when you choose to use the Media class as the Media class just contains some base functionality
-- **join**:
-  - Data: _empty_
-  - This events get fired after the bot has successfully established a connection with the voice channel
-- **leave**
-  - Data: _empty_
-  - This event gets fired after the bot has left a voice channel
-
-### MediaPlayer
-
-#### Constructor:
-
-**`new MediaPlayer(logs?, port?)`**:
-
-- Creates a new Revoice-compatible media player object with basic sound controls like play/pause
-- Parameters:
-  - **`logs`**: typeof `Boolean`; Wether or not output ffmpeg logs in the console; Optional, default: `false`
-  - **`port`**: typeof `int`; The port ffmpeg should send the rtp data to; Optional but should be changed if wanting to run multiple instances, defaults to `5030`
-
-#### Properties/Methods:
-
-**Inherits from the Media class**
-
-- **`getMediaTrack()`**: Get the MediaStreamTrack used for WebRTC transports
-- **`playFile(path)`**: Play the file from the given filePath; Param typeof `String`
-- **`playStream(stream)`**: Play a ReadableStream; Param typeof `Readable`
-- **`pause()`**: Pause the current playback if playing
-- **`resume()`**: Unpause the current playback if paused (This function is developement but working)
-- **`stop()`**: Completely stop the current playback; This can be used to stop a song to play another
-- **`on(event, callback)`**: Equally to EventEmitter.on, for supported events refer to: [The Events section](#events-1)
-- **`once(event, callback)`**: Equally to EventEmitter.once, refer to `on()`
-
-#### Events:
-
-- **start**:
-  - Data: _empty_
-  - This event gets fired when the MusicPlayer starts to process music. This includes buffering and playing
-- **finish**:
-  - Data: _empty_
-  - This event gets fired when a music stream finishes to stream. This feature is under developement but working
-
-### Media
-
-_**This class should only be used if you want to implement your own MediaPlayer class.**_
-
-#### Constructor:
-
-**`new Media(logs?, port?)`**:
-
-- Creates a new Revoice-compatible media object
-- Parameters:
-  - **`logs`**: typeof `Boolean`; Wether or not output ffmpeg logs in the console; Optional, default: `false`
-  - **`port`**: typeof `int`; The port ffmpeg should send the rtp data to; Optional, defaults to `5030`
-
-#### Properties/Methods:
-
-- **`getMediaTrack()`**: Get the MediaStreamTrack used for WebRTC transports
-- **`playFile(path)`**: Play the file from the given filePath; Param typeof `String`
-- **`playStream(stream)`**: Play a ReadableStream; Param typeof `Readable`
-
-#### Signaling
-
-WIP
--->

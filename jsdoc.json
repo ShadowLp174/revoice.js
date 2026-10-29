@@ -1,8 +1,10 @@
 {
   "opts": {
-    "template": "node_modules/better-docs",
+    "template": "node_modules/clean-jsdoc-theme/dist",
     "destination": "./docs",
-    "readme": "README.md"
+    "readme": "README-docs.md",
+    "tutorials": "./tutorials",
+    "siteName": "Revoice.js Documentation"
   },
   "source": {
     "include": ["./src", "./src/engine", "./src/dsp", "./src/adapters"],
@@ -18,6 +20,6 @@
     "cleverLinks": false,
     "monospaceLinks": false
   },
-  "plugins": ["plugins/markdown"],
+  "plugins": ["./link-rewriter.js", "plugins/markdown"],
   "recurseDepth": 10
 }

@@ -1,4 +1,7 @@
 export = Signaling;
+/**
+ * @deprecated
+ */
 declare class Signaling {
     constructor(apiClient: any, channelId: any, reconnectTimeout?: number);
     client: any;

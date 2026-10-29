@@ -4,16 +4,18 @@ export = User;
  * @classdesc A user object storing data about a user associated with revoice
  */
 declare class User extends EventEmitter {
-    constructor(id: any, api: any);
+    constructor(participant?: {});
     id: any;
-    api: any;
     connected: boolean;
     connectedTo: any;
+    participant: {};
+    metadata: {};
     username: any;
+    discriminator: any;
     badges: any;
     relationship: any;
     online: any;
-    rawData: any;
+    rawData: {};
 }
 import EventEmitter = require("events");
 //# sourceMappingURL=User.d.ts.map

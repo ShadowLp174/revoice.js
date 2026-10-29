@@ -29,23 +29,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Build
-        uses: andstor/jsdoc-action@v1
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          front_page: README.md
-          output_dir: ./docs
-          config_file: jsdoc.json
-          template: better-docs
+          node-version: '20' # Uses a modern Node LTS version
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Docs
+        # Runs your custom script, then builds JSDoc
+        run: |
+          node prepare-docs.js
+          npx jsdoc -c jsdoc.json
 
       - name: Setup Pages
-        uses: actions/configure-pages@v2
+        uses: actions/configure-pages@v4
+
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: '.'
+          # Uploads ONLY the generated docs folder instead of the whole repository ('.')
+          # Note: Ensure your jsdoc.json sets "opts": { "destination": "./docs" }
+          path: './docs'
+
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v1
+        uses: actions/deploy-pages@v4

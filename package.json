@@ -1,12 +1,13 @@
 {
   "name": "revoice.js",
-  "version": "0.2.1696",
+  "version": "1.0.0",
   "description": "A voice module for Stoat",
   "main": "index.js",
   "typings": "./typings/index.d.ts",
   "scripts": {
     "test": "node test/engine.test.js",
-    "docs": "jsdoc -c jsdoc.json",
+    "docs": "rm -rf ./docs && node prepare-docs.js && jsdoc -c jsdoc.json",
+    "docs:clean": "rm -rf ./docs && node prepare-docs.js && jsdoc -c jsdoc.json && rm README-docs.md",
     "typings": "tsc -p ."
   },
   "keywords": [
@@ -57,20 +58,19 @@
   "license": "MIT",
   "dependencies": {
     "@livekit/rtc-node": "^0.13.20",
-    "better-docs": "^2.7.2",
     "ffmpeg-static": "^5.0.2",
     "fluent-ffmpeg": "^2.1.3",
     "msc-node": "^0.0.26",
     "music-metadata": "^11.9.0",
     "prism-media": "^1.3.4",
     "revolt-api": "^0.5.5",
-    "taffydb": "^2.7.3",
     "wav": "^1.0.2",
     "wavefile": "^11.0.0",
     "ws": "^8.16.0"
   },
   "devDependencies": {
     "@types/node": "^18.11.18",
+    "clean-jsdoc-theme": "^5.2.1",
     "jsdoc": "^4.0.5",
     "typescript": "^4.9.4"
   }
