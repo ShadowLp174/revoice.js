@@ -72,6 +72,7 @@
     "@types/node": "^18.11.18",
     "clean-jsdoc-theme": "^5.2.1",
     "jsdoc": "^4.0.5",
+    "jsdoc-plugin-typescript": "^3.2.1",
     "typescript": "^4.9.4"
   }
 }

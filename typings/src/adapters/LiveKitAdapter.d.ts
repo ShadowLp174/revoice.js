@@ -7,12 +7,12 @@ export = LiveKitAdapter;
  */
 declare class LiveKitAdapter extends BaseTransportAdapter {
     /**
-     * @param {Object} [options={}]\
-     * @param {number} [options.sampleRate=48000]\
-     * @param {number} [options.channels=2]\
-     * @param {number} [options.queueSizeMs=200] Low-latency internal queue (200ms = 10 frames of 20ms)\
-     * @param {string} [options.logLevel="warn"]\
-     * @param {boolean} [options.receiveAudio=false]\
+     * @param {Object} [options={}]
+     * @param {number} [options.sampleRate=48000]
+     * @param {number} [options.channels=2]
+     * @param {number} [options.queueSizeMs=200] Low-latency internal queue (200ms = 10 frames of 20ms)
+     * @param {string} [options.logLevel="warn"]
+     * @param {boolean} [options.receiveAudio=false]
      */
     constructor(options?: {
         sampleRate?: number;

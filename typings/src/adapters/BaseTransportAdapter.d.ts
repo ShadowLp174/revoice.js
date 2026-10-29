@@ -66,7 +66,7 @@ declare class BaseTransportAdapter extends EventEmitter {
      * Push a 20ms interleaved Int16 PCM frame to the voice transport.
      * @param {Int16Array} int16Samples Interleaved stereo/mono samples (e.g. 960 samples * 2 channels = 1920 Int16s)
      * @param {number} [samplesPerChannel=960]
-     * @returns {Promise<void>}\
+     * @returns {Promise<void>}
      */
     capturePcmFrame(_int16Samples: any, _samplesPerChannel: any): Promise<void>;
     /**

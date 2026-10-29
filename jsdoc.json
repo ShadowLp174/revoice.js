@@ -20,6 +20,6 @@
     "cleverLinks": false,
     "monospaceLinks": false
   },
-  "plugins": ["./link-rewriter.js", "plugins/markdown"],
+  "plugins": ["plugins/markdown", "node_modules/jsdoc-plugin-typescript"],
   "recurseDepth": 10
 }

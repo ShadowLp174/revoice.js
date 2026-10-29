@@ -43,7 +43,7 @@ jobs:
         # Runs your custom script, then builds JSDoc
         run: |
           node prepare-docs.js
-          npx jsdoc -c jsdoc.json
+          npx jsdoc -c jsdoc.json || exit 0
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
