@@ -99,4 +99,4 @@ For the data you can pass, see [oapi](https://github.com/insertish/oapi#example)
 
 ## Documentation
 
-For the documentation, please have a look at the pages deployment: https://shadowlp174.github.io/revoice.js/docs
+For the documentation, please have a look at the pages deployment: [https://shadowlp174.github.io/revoice.js/](https://shadowlp174.github.io/revoice.js/)

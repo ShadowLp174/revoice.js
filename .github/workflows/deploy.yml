@@ -45,6 +45,9 @@ jobs:
           node prepare-docs.js
           npx jsdoc -c jsdoc.json || exit 0
 
+      - name: Disable Jekyll
+        run: touch ./docs/.nojekyll
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
