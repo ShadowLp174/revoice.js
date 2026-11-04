@@ -1,5 +1,5 @@
 const { EventEmitter } = require("events");
-const { spawn } = require("child_process");
+const { execSync, spawn } = require("child_process");
 const fs = require("fs");
 const http = require("http");
 const https = require("https");
@@ -7,11 +7,20 @@ const RingBuffer = require("./RingBuffer.js");
 const DSPChain = require("../dsp/DSPChain.js");
 const Pacer = require("./Pacer.js");
 
-let ffmpegPath = "ffmpeg";
-try {
-  ffmpegPath = require("ffmpeg-static") || "ffmpeg";
-} catch (_) {}
+// prefer System binaries over ffmpeg-static
+function resolveFfmpeg() {
+  if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
+  try {
+    execSync("ffmpeg -version", { stdio: "ignore" });
+    return "ffmpeg";
+  } catch (_) {}
+  try {
+    return require("ffmpeg-static") || "ffmpeg";
+  } catch (_) {}
+  return "ffmpeg";
+}
 
+const ffmpegPath = resolveFfmpeg();
 /**
  * Shared state indices when backed by a SharedArrayBuffer Int32Array(8):
  * [0]: state (0=IDLE, 1=BUFFERING, 2=PLAYING, 3=PAUSED, 4=STOPPED)
@@ -450,7 +459,7 @@ class AudioPipeline extends EventEmitter {
   }
 
   #spawnFfmpegDemuxer(input, inputOptions = []) {
-    const args = ["-hide_banner", "-loglevel", "warning", "-vn", "-sn", "-dn"];
+    const args = ["-hide_banner", "-loglevel", "debug", "-vn", "-sn", "-dn"];
 
     const extraInputArgs = Array.isArray(inputOptions)
       ? inputOptions.flatMap((opt) => String(opt).trim().split(/\s+/)).filter(Boolean)

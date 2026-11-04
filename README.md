@@ -42,6 +42,13 @@ Please note that unlike on Discord bots, Stoat bots are able to join multiple vo
 
 Media has to be created using the MediaPlayer class. You can stream both node streams and media files to revolt.
 
+> [!IMPORTANT]
+> Revoice comes with a packaged FFmpeg version from `ffmpeg-static`. 
+> In my testing, it appears to sometimes have issues with resolving URLs.
+> If you experience any issues with that, please install FFmpeg natively on the host.
+> Revoice will automatically prefer host binaries over the static ones.
+
+
 Example:
 
 If you want to see a working music bot using revoice, check out [Remix](https://github.com/remix-bot/revolt)!

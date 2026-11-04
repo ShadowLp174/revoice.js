@@ -71,8 +71,17 @@ class Revoice extends EventEmitter {
       ...(apiConfig?.adapterOptions || {}),
     };
 
+    this.nodes = [];
+
     if (loginData) {
-      this.login(loginData, apiConfig);
+      this.login(loginData, apiConfig).then(() => {
+        this.api.get("/").then(res => {
+          this.nodes = res.features.livekit.nodes;
+          if (this.nodes.length === 0) console.error("No livekit node configurations available!");
+        }).catch(e => {
+          console.warn("Error fetching livekit node configuration: ", e);
+        });
+      });
     }
 
     this.connections = new Map();
@@ -154,9 +163,21 @@ class Revoice extends EventEmitter {
         let token = joinOptions.token;
         let url = joinOptions.url;
 
+        var selected;
+        if (!joinOptions.node) {
+          // Gather latency // (CREDIT: https://github.com/stoatchat/for-web/blob/56e7191cdfbffca2c4c28920e9c6459e0213a973/packages/client/components/rtc/state.tsx#L313-L320)
+          selected = await Promise.any(
+            this.nodes.map(async (node) => {
+              return fetch(node.public_url.replace("wss", "https")).then(() => {
+                return node.name;
+              });
+            }),
+          );
+        }
+
         if (!token || !url) {
           const callData = await this.api.post("/channels/" + channelId + "/join_call", {
-            node: joinOptions.node || "worldwide",
+            node: joinOptions.node || selected || "worldwide",
           });
           token = callData?.token;
           url = callData?.url;
